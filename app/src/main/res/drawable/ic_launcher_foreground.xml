@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 1. Neon Emerald Ring Loop Frame (Venzora orbital circle) -->
+    <path
+        android:pathData="M54,23 C71.12,23 85,36.88 85,54 C85,71.12 71.12,85 54,85 C36.88,85 23,71.12 23,54 C23,36.88 36.88,23 54,23 Z"
+        android:strokeWidth="3.2"
+        android:strokeColor="#FF22C55E"
+        android:strokeLineCap="round" />
+
+    <!-- Gradient shading on the circular ring -->
+    <path
+        android:pathData="M32,32 C44,20 64,20 76,32"
+        android:strokeWidth="4"
+        android:strokeColor="#FF4ADE80"
+        android:strokeLineCap="round" />
+
+    <!-- 2. Stylized 3D Letter 'V' monogram with Chat Bubble Stem (pure white & soft shadow) -->
+    <!-- Left Wing of 'V' -->
+    <path
+        android:pathData="M27,35 L40,35 C42.5,35 44.5,37 45.5,39.5 L54,62 L43,62 L32,38 C30.5,35.5 28.5,35 27,35 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="27"
+                android:startY="35"
+                android:endX="54"
+                android:endY="62"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="1.0" android:color="#FFE2E8F0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Main Right Arm of 'V' swooping smoothly upward into the chat bubble loop -->
+    <path
+        android:pathData="M54,77 C50,77 47,73 49,69 L67,41 C68.5,38.5 70,36 73,36 C76.5,36 78,38.5 78,41.5 L63,69 C61,74.5 58,77 54,77 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="49"
+                android:startY="36"
+                android:endX="78"
+                android:endY="77"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="0.7" android:color="#FFF8FAFC" />
+                <item android:offset="1.0" android:color="#FFE2E8F0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Inner 3D fold layer of the 'V' with green glow tint -->
+    <path
+        android:pathData="M54,73 C56,70 65,49 71,39 C67,46 60,61 54,73 Z"
+        android:fillColor="#FF86EFAC" />
+
+    <!-- 3. Integrated Top-Right Speech Bubble -->
+    <path
+        android:pathData="M63,26 L77,26 C82.5,26 87,30.5 87,36 C87,41.5 82.5,46 77,46 L71,46 L64,52 L65,46 C60.5,46 57,41.5 57,36 C57,30.5 60.5,26 63,26 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="57"
+                android:startY="26"
+                android:endX="87"
+                android:endY="52"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="1.0" android:color="#FFF1F5F9" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 4. Three Chat Dots inside the Speech Bubble (Venzora Lime / Emerald Green dots) -->
+    <!-- Dot 1 -->
+    <path
+        android:pathData="M66,36 C67.1,36 68,35.1 68,34 C68,32.9 67.1,32 66,32 C64.9,32 64,32.9 64,34 C64,35.1 64.9,36 66,36 Z"
+        android:fillColor="#FF22C55E" />
+    <!-- Dot 2 -->
+    <path
+        android:pathData="M72,36 C73.1,36 74,35.1 74,34 C74,32.9 73.1,32 72,32 C70.9,32 70,32.9 70,34 C70,35.1 70.9,36 72,36 Z"
+        android:fillColor="#FF22C55E" />
+    <!-- Dot 3 -->
+    <path
+        android:pathData="M78,36 C79.1,36 80,35.1 80,34 C80,32.9 79.1,32 78,32 C76.9,32 76,32.9 76,34 C76,35.1 76.9,36 78,36 Z"
+        android:fillColor="#FF22C55E" />
+
+</vector>

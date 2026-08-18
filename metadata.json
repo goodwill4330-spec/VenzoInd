@@ -1,0 +1,6 @@
+{
+  "name": "VenzoInd",
+  "description": "VenzoInd - Ultra-fast, encrypted messaging with AI chat, HD calls, secure UPI wallet, and modern cyber-green design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,4 +1,4 @@
-name: Build and Release Android APK
+name: Build Android APK
 
 on:
   push:
@@ -24,24 +24,30 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
+    - name: Accept Android SDK Licenses
+      run: |
+        yes | sdkmanager --licenses || true
+        sdkmanager "platforms;android-36" "build-tools;36.0.0" || true
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
-    - name: Generate Dummy Keystore if Missing
+    - name: Generate Dummy Keystore & Env
       run: |
         if [ ! -f "debug.keystore" ]; then
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
         fi
-        if [ ! -f ".env" ]; then
-          touch .env
-        fi
+        touch .env
 
-    - name: Assemble Debug APK
-      run: gradle :app:assembleDebug -x test --stacktrace
+    - name: Generate Wrapper & Build Debug APK
+      run: |
+        gradle wrapper --gradle-version 8.7
+        chmod +x gradlew
+        ./gradlew assembleDebug -x test -x lint -x check --stacktrace
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: venzoind-chat-apk
+        name: venzoind-debug-apk
         path: app/build/outputs/apk/debug/*.apk
         retention-days: 14

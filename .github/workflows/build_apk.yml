@@ -24,6 +24,11 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
+    - name: Accept Android SDK Licenses & Install API 36
+      run: |
+        yes | sdkmanager --licenses || true
+        sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
@@ -36,13 +41,14 @@ jobs:
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
         fi
         touch .env
+        touch .env.example
 
     - name: Build Debug APK
-      run: gradle :app:assembleDebug -x test -x lint -x check --no-daemon
+      run: gradle :app:assembleDebug --stacktrace --info -x test -x lint -x check --no-daemon
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: venzoind-debug-apk
+        name: BharatChat-Debug-APK
         path: app/build/outputs/apk/debug/*.apk
         retention-days: 14

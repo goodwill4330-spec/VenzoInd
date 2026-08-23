@@ -31,29 +31,65 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 platforms;android-35 build-tools;35.0.0'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
 
-      - name: Accept Licenses & Install Android 36 Platform
+      - name: Accept Android SDK Licenses & Extra Components
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+          sdkmanager --channel=3 "platforms;android-36" "build-tools;36.0.0" || true
 
       - name: Prepare Secrets, Environment & Keystore
         run: |
+          printf "sdk.dir=$ANDROID_HOME\n" > local.properties
           printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env
           printf "GEMINI_API_KEY=\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env.example
           printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > secrets.properties
           printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > local.defaults.properties
+          
           mkdir -p app
           cp .env app/.env 2>/dev/null || true
           cp secrets.properties app/secrets.properties 2>/dev/null || true
+          
           if [ ! -f "app/google-services.json" ]; then
-            printf '{\n  "project_info": { "project_number": "505106989844", "project_id": "bharatchat-sovereign", "storage_bucket": "bharatchat-sovereign.appspot.com" },\n  "client": [ { "client_info": { "mobilesdk_app_id": "1:505106989844:android:bharatchat", "android_client_info": { "package_name": "com.aistudio.bharatchat.vnrkzp" } }, "oauth_client": [], "api_key": [ { "current_key": "AIzaSyB0haratChatSecureFallbackKey2026" } ], "services": { "appinvite_service": { "other_platform_oauth_client": [] } } } ],\n  "configuration_version": "1"\n}\n' > app/google-services.json
+            cat << 'EOF' > app/google-services.json
+{
+  "project_info": {
+    "project_number": "505106989844",
+    "project_id": "bharatchat-sovereign",
+    "storage_bucket": "bharatchat-sovereign.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:505106989844:android:bharatchat",
+        "android_client_info": {
+          "package_name": "com.aistudio.bharatchat.vnrkzp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0haratChatSecureFallbackKey2026"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+EOF
           fi
+
           if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
             base64 -d debug.keystore.base64 > debug.keystore || true
           fi
@@ -63,7 +99,12 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
+          chmod +x gradlew 2>/dev/null || true
+          if [ -f "./gradlew" ]; then
+            ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
+          else
+            gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
+          fi
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4

@@ -30,8 +30,15 @@ jobs:
         sdkmanager --install "platforms;android-36" "build-tools;36.0.0" --channel=3 || true
         sdkmanager --install "platforms;android-35" "build-tools;35.0.0" || true
 
-    - name: Make Gradlew Executable & Setup Environment
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.11.1'
+        cache-disabled: false
+
+    - name: Prepare Keystore and Environment
       run: |
+        gradle wrapper --gradle-version 8.11.1
         chmod +x ./gradlew || true
         if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
           base64 -d debug.keystore.base64 > debug.keystore || true
@@ -43,12 +50,7 @@ jobs:
         touch .env.example
 
     - name: Build Debug APK
-      run: |
-        if [ -f "./gradlew" ]; then
-          ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
-        else
-          gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
-        fi
+      run: gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4

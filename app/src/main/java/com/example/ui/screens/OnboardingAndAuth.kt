@@ -44,7 +44,17 @@ import com.example.ui.components.ProfileCameraCaptureDialog
 import com.example.ui.components.VenzoraLogoEmblem
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.BharatChatViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.viewmodel.AuthenticationViewModel
+import com.example.ui.viewmodel.PhoneAuthStatus
+import com.example.ui.viewmodel.findActivity
+import com.google.firebase.FirebaseException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.PhoneAuthCredential
+import com.google.firebase.auth.PhoneAuthOptions
+import com.google.firebase.auth.PhoneAuthProvider
 import kotlinx.coroutines.delay
+import java.util.concurrent.TimeUnit
 
 data class Country(
     val name: String,
@@ -292,31 +302,27 @@ enum class AuthStep {
 @Composable
 fun AuthScreen(
     onLoginSuccess: () -> Unit,
-    viewModel: BharatChatViewModel? = null
+    viewModel: BharatChatViewModel? = null,
+    authViewModel: AuthenticationViewModel = viewModel()
 ) {
     val context = LocalContext.current
     var currentStep by remember { mutableStateOf(AuthStep.ENTER_PHONE) }
 
-    // Auth Mode: Create Account vs Login
-    var isNewAccountMode by remember { mutableStateOf(true) }
+    val isNewAccountMode by authViewModel.isNewAccountMode.collectAsState()
+    val selectedCountry by authViewModel.selectedCountry.collectAsState()
+    val phoneNumberInput by authViewModel.phoneNumberInput.collectAsState()
+    val authStatus by authViewModel.authStatus.collectAsState()
+    val otpDigits by authViewModel.otpDigits.collectAsState()
+    val generatedBackupOtp by authViewModel.generatedBackupOtp.collectAsState()
+    val resendTimer by authViewModel.resendTimer.collectAsState()
+    val callTimer by authViewModel.callTimer.collectAsState()
+    val otpErrorMsg by authViewModel.otpErrorMessage.collectAsState()
+    val isVerifying by authViewModel.isVerifying.collectAsState()
 
-    // Country selection
-    var selectedCountry by remember { mutableStateOf(INTERNATIONAL_COUNTRIES[0]) } // Default India (+91)
     var showCountryPickerSheet by remember { mutableStateOf(false) }
     var countrySearchQuery by remember { mutableStateOf("") }
-
-    // Phone input
-    var phoneNumberInput by remember { mutableStateOf("") }
     var showConfirmNumberDialog by remember { mutableStateOf(false) }
-
-    // OTP states
-    var generatedOtp by remember { mutableStateOf("784291") }
-    var otpDigits by remember { mutableStateOf(listOf("", "", "", "", "", "")) }
     val focusRequesters = remember { List(6) { FocusRequester() } }
-    var resendTimer by remember { mutableIntStateOf(30) }
-    var callTimer by remember { mutableIntStateOf(45) }
-    var isVerifying by remember { mutableStateOf(false) }
-    var otpErrorMsg by remember { mutableStateOf<String?>(null) }
 
     // Profile Setup states
     var userNameInput by remember { mutableStateOf("VenzoInd User") }
@@ -335,17 +341,11 @@ fun AuthScreen(
         }
     }
 
+    // Trigger phone auth verification when moving to OTP step
     LaunchedEffect(currentStep) {
         if (currentStep == AuthStep.VERIFY_OTP) {
-            generatedOtp = (100000..999999).random().toString()
-            resendTimer = 30
-            callTimer = 45
-            otpDigits = listOf("", "", "", "", "", "")
-            while (resendTimer > 0) {
-                delay(1000)
-                resendTimer--
-                if (callTimer > 0) callTimer--
-            }
+            val activity = context.findActivity()
+            authViewModel.startPhoneVerification(activity)
         }
     }
 
@@ -383,7 +383,7 @@ fun AuthScreen(
                                     color = if (isNewAccountMode) BharatGreenLight else Color.Transparent,
                                     modifier = Modifier
                                         .weight(1f)
-                                        .clickable { isNewAccountMode = true }
+                                        .clickable { authViewModel.setAuthMode(true) }
                                         .padding(vertical = 2.dp)
                                 ) {
                                     Text(
@@ -400,7 +400,7 @@ fun AuthScreen(
                                     color = if (!isNewAccountMode) BharatGreenLight else Color.Transparent,
                                     modifier = Modifier
                                         .weight(1f)
-                                        .clickable { isNewAccountMode = false }
+                                        .clickable { authViewModel.setAuthMode(false) }
                                         .padding(vertical = 2.dp)
                                 ) {
                                     Text(
@@ -453,8 +453,8 @@ fun AuthScreen(
                         ) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -486,19 +486,27 @@ fun AuthScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Dial code box
+                            // Dial code box with Flag and Picker trigger
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = Color(0xFF1E293B),
                                 border = BorderStroke(1.dp, Color(0xFF334155)),
                                 modifier = Modifier
-                                    .width(90.dp)
+                                    .width(105.dp)
                                     .height(56.dp)
+                                    .clickable { showCountryPickerSheet = true }
+                                    .testTag("dial_code_picker_button")
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(selectedCountry.flag, fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = selectedCountry.code,
-                                        fontSize = 16.sp,
+                                        fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = BharatGreenLight
                                     )
@@ -509,8 +517,7 @@ fun AuthScreen(
                             OutlinedTextField(
                                 value = phoneNumberInput,
                                 onValueChange = { input ->
-                                    val digits = input.filter { it.isDigit() }
-                                    if (digits.length <= 15) phoneNumberInput = digits
+                                    authViewModel.updatePhoneNumber(input)
                                 },
                                 placeholder = {
                                     Text(
@@ -553,7 +560,7 @@ fun AuthScreen(
                             color = Color(0x2210B981),
                             border = BorderStroke(1.dp, BharatGreenLight.copy(alpha = 0.3f)),
                             modifier = Modifier.clickable {
-                                phoneNumberInput = "9876543210"
+                                authViewModel.updatePhoneNumber("9876543210")
                             }
                         ) {
                             Text(
@@ -569,7 +576,7 @@ fun AuthScreen(
                     Button(
                         onClick = {
                             if (phoneNumberInput.isBlank()) {
-                                phoneNumberInput = "9876543210"
+                                authViewModel.updatePhoneNumber("9876543210")
                             }
                             showConfirmNumberDialog = true
                         },
@@ -587,6 +594,7 @@ fun AuthScreen(
 
             // STEP 2: WhatsApp OTP Verification Screen
             AuthStep.VERIFY_OTP -> {
+                val fullE164 = authViewModel.getCleanE164PhoneNumber()
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -608,7 +616,7 @@ fun AuthScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "Waiting to detect an SMS sent to\n${selectedCountry.code} $phoneNumberInput",
+                            text = "Waiting to detect an SMS sent to\n${selectedCountry.flag} $fullE164",
                             fontSize = 13.5.sp,
                             color = TextSecondaryDark,
                             textAlign = TextAlign.Center,
@@ -623,7 +631,30 @@ fun AuthScreen(
                             Text("Wrong number? Edit", color = BharatGreenLight, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Status Info Pill (Firebase Phone Auth Handshake Feedback)
+                        val statusText = when (authStatus) {
+                            is PhoneAuthStatus.SendingCode -> "📡 Connecting to Firebase SMS Gateway..."
+                            is PhoneAuthStatus.CodeSent -> "✅ SMS dispatched to $fullE164"
+                            is PhoneAuthStatus.AutoVerified -> "⚡ Instant Google Play Services Auto-Detection!"
+                            is PhoneAuthStatus.Error -> (authStatus as PhoneAuthStatus.Error).message
+                            else -> "⚡ High-Speed OTP Delivery Active"
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color(0xFF1E293B),
+                            border = BorderStroke(1.dp, Color(0xFF334155)),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            Text(
+                                text = statusText,
+                                fontSize = 11.5.sp,
+                                color = if (authStatus is PhoneAuthStatus.Error) Color(0xFFEF4444) else BharatGreenLight,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
 
                         // High Visibility OTP Banner & 1-Tap Autofill
                         Surface(
@@ -633,9 +664,8 @@ fun AuthScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    val chars = generatedOtp.take(6).padEnd(6, '0').map { it.toString() }
-                                    otpDigits = chars
-                                    Toast.makeText(context, "OTP $generatedOtp auto-filled!", Toast.LENGTH_SHORT).show()
+                                    authViewModel.fillOtp(generatedBackupOtp)
+                                    Toast.makeText(context, "Verification code $generatedBackupOtp auto-filled!", Toast.LENGTH_SHORT).show()
                                 }
                                 .testTag("sms_autofill_card")
                         ) {
@@ -661,7 +691,7 @@ fun AuthScreen(
                                             color = TextSecondaryDark
                                         )
                                         Text(
-                                            text = generatedOtp,
+                                            text = generatedBackupOtp,
                                             fontSize = 16.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = BharatGreenLight,
@@ -679,8 +709,7 @@ fun AuthScreen(
                                     shape = RoundedCornerShape(8.dp),
                                     color = BharatGreenLight,
                                     modifier = Modifier.clickable {
-                                        val chars = generatedOtp.take(6).padEnd(6, '0').map { it.toString() }
-                                        otpDigits = chars
+                                        authViewModel.fillOtp(generatedBackupOtp)
                                         Toast.makeText(context, "Code inserted!", Toast.LENGTH_SHORT).show()
                                     }
                                 ) {
@@ -695,7 +724,7 @@ fun AuthScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(22.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 
                         // 6-digit WhatsApp PIN boxes
                         Row(
@@ -719,16 +748,17 @@ fun AuthScreen(
                                             value = otpDigits[index],
                                             onValueChange = { v ->
                                                 val clean = v.filter { it.isDigit() }.take(1)
-                                                val updated = otpDigits.toMutableList()
-                                                updated[index] = clean
-                                                otpDigits = updated
+                                                authViewModel.updateOtpDigit(index, clean)
                                                 if (clean.isNotEmpty() && index < 5) {
                                                     focusRequesters[index + 1].requestFocus()
                                                 }
                                                 // Auto verify if all 6 digits entered
-                                                if (updated.all { it.isNotEmpty() }) {
-                                                    isVerifying = true
-                                                    currentStep = AuthStep.PROFILE_SETUP
+                                                val currentList = otpDigits.toMutableList()
+                                                currentList[index] = clean
+                                                if (currentList.all { it.isNotEmpty() }) {
+                                                    authViewModel.verifyEnteredOtp {
+                                                        currentStep = AuthStep.PROFILE_SETUP
+                                                    }
                                                 }
                                             },
                                             singleLine = true,
@@ -760,7 +790,7 @@ fun AuthScreen(
                             Text(text = otpErrorMsg ?: "", color = Color(0xFFEF4444), fontSize = 12.5.sp)
                         }
 
-                        Spacer(modifier = Modifier.height(28.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
 
                         // Resend SMS and Call me options
                         Column(
@@ -785,9 +815,9 @@ fun AuthScreen(
                                 if (resendTimer == 0) {
                                     TextButton(
                                         onClick = {
-                                            generatedOtp = (100000..999999).random().toString()
-                                            resendTimer = 30
-                                            Toast.makeText(context, "New OTP sent via SMS", Toast.LENGTH_SHORT).show()
+                                            val activity = context.findActivity()
+                                            authViewModel.startPhoneVerification(activity, isResend = true)
+                                            Toast.makeText(context, "New OTP requested for $fullE164", Toast.LENGTH_SHORT).show()
                                         }
                                     ) {
                                         Text("RESEND", color = BharatGreenLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -813,8 +843,7 @@ fun AuthScreen(
                                 if (callTimer == 0) {
                                     TextButton(
                                         onClick = {
-                                            Toast.makeText(context, "Voice call verification initiated", Toast.LENGTH_SHORT).show()
-                                            callTimer = 45
+                                            Toast.makeText(context, "Voice call verification dispatched to $fullE164", Toast.LENGTH_SHORT).show()
                                         }
                                     ) {
                                         Text("CALL ME", color = BharatGreenLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -829,11 +858,11 @@ fun AuthScreen(
                         onClick = {
                             val entered = otpDigits.joinToString("")
                             if (entered.length < 6) {
-                                val chars = generatedOtp.take(6).padEnd(6, '0').map { it.toString() }
-                                otpDigits = chars
+                                authViewModel.fillOtp(generatedBackupOtp)
                             }
-                            isVerifying = true
-                            currentStep = AuthStep.PROFILE_SETUP
+                            authViewModel.verifyEnteredOtp {
+                                currentStep = AuthStep.PROFILE_SETUP
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -842,7 +871,12 @@ fun AuthScreen(
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight)
                     ) {
-                        Text("Verify & Continue", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = BharatWhite)
+                        Text(
+                            text = if (isVerifying) "Verifying..." else "Verify & Continue",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BharatWhite
+                        )
                     }
                 }
             }
@@ -1116,7 +1150,7 @@ fun AuthScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        selectedCountry = country
+                                        authViewModel.selectCountry(country)
                                         showCountryPickerSheet = false
                                     }
                                     .padding(vertical = 12.dp, horizontal = 8.dp),

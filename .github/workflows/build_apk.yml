@@ -50,7 +50,8 @@ jobs:
         touch .env.example
 
     - name: Build Debug APK
-      run: gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
+      run: |
+        ./gradlew :app:assembleDebug --stacktrace --no-daemon --no-configuration-cache -x test -x lint -x check || gradle :app:assembleDebug --stacktrace --no-daemon --no-configuration-cache -x test -x lint -x check
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4

@@ -77,11 +77,9 @@ EOF
       env:
         GEMINI_API_KEY: "AIzaSyFakeKeyForCiWorkflowOnly12345"
         FIREBASE_APPCHECK_DEBUG_TOKEN: ""
-        JAVA_HOME: /usr/lib/jvm/temurin-21-jdk-amd64
       run: |
         mkdir -p app/build/outputs/apk/debug
-        export ANDROID_HOME=$ANDROID_SDK_ROOT
-        ./gradlew :app:assembleDebug --stacktrace --no-daemon --scan=false -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
+        ./gradlew :app:assembleDebug --stacktrace --no-daemon --no-scan -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4

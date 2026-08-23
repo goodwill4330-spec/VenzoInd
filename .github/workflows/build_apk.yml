@@ -38,10 +38,22 @@ jobs:
 
     - name: Prepare Keystore and Environment
       run: |
-        touch local.defaults.properties
-        touch secrets.properties
-        touch .env
-        touch .env.example
+        cat << 'EOF' > .env
+GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
+FIREBASE_APPCHECK_DEBUG_TOKEN=
+EOF
+        cat << 'EOF' > .env.example
+GEMINI_API_KEY=
+FIREBASE_APPCHECK_DEBUG_TOKEN=
+EOF
+        cat << 'EOF' > secrets.properties
+GEMINI_API_KEY=
+FIREBASE_APPCHECK_DEBUG_TOKEN=
+EOF
+        cat << 'EOF' > local.defaults.properties
+GEMINI_API_KEY=
+FIREBASE_APPCHECK_DEBUG_TOKEN=
+EOF
         if [ ! -f "app/google-services.json" ]; then
           mkdir -p app
           cat << 'EOF' > app/google-services.json
@@ -63,7 +75,7 @@ jobs:
 
     - name: Build Debug APK
       env:
-        GEMINI_API_KEY: ""
+        GEMINI_API_KEY: "AIzaSyFakeKeyForCiWorkflowOnly12345"
         FIREBASE_APPCHECK_DEBUG_TOKEN: ""
       run: |
         mkdir -p app/build/outputs/apk/debug

@@ -46,40 +46,6 @@ jobs:
           cp .env app/secrets.properties
           cp .env app/local.defaults.properties
 
-          if [ ! -f "app/google-services.json" ]; then
-            cat << 'EOF' > app/google-services.json
-{
-  "project_info": {
-    "project_number": "505106989844",
-    "project_id": "bharatchat-sovereign",
-    "storage_bucket": "bharatchat-sovereign.appspot.com"
-  },
-  "client": [
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:505106989844:android:bharatchat",
-        "android_client_info": {
-          "package_name": "com.aistudio.bharatchat.vnrkzp"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyB0haratChatSecureFallbackKey2026"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    }
-  ],
-  "configuration_version": "1"
-}
-EOF
-          fi
-
           if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
             base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
           fi

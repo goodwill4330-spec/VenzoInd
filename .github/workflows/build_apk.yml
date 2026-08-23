@@ -21,18 +21,30 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Prepare Android SDK
+      - name: Set up Android SDK & Licenses
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" || true
+          export ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          export ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$ANDROID_HOME}
+          
+          mkdir -p "$ANDROID_HOME/licenses" || true
+          mkdir -p "$ANDROID_SDK_ROOT/licenses" || true
+          
+          # Pre-accept all Android SDK licenses
+          printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n84831b9409646a918e30573bab4c9c91346d8abd\n" > "$ANDROID_HOME/licenses/android-sdk-license" || true
+          printf "84831b9409646a918e30573bab4c9c91346d8abd\n504667f4c0de7af1a06de9f4b1727b84351f2910\n" > "$ANDROID_HOME/licenses/android-sdk-preview-license" || true
+          
+          cp -r "$ANDROID_HOME/licenses" "$ANDROID_SDK_ROOT/" 2>/dev/null || true
+          
+          SDKMANAGER=$(which sdkmanager 2>/dev/null || echo "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager")
+          if [ -x "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses || true
+            "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" || true
+          fi
+          
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
 
       - name: Prepare Config and Secrets
         run: |
-          echo "sdk.dir=$ANDROID_HOME" > local.properties
-
           echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > .env
           echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> .env
 
@@ -58,14 +70,11 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Generate Gradle Wrapper Jar
+      - name: Build APK with Gradle Wrapper
         run: |
           gradle wrapper --gradle-version 9.3.1 --distribution-type bin
           chmod +x ./gradlew
-
-      - name: Build APK with Gradle Wrapper
-        run: |
-          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+          ./gradlew :app:assembleDebug --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -73,3 +82,4 @@ jobs:
           name: VenzoInd-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
+

@@ -33,12 +33,12 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
-        gradle-version: '8.11.1'
-        cache-disabled: false
+        gradle-version: '8.13'
+        cache-disabled: true
 
     - name: Prepare Keystore and Environment
       run: |
-        gradle wrapper --gradle-version 8.11.1
+        gradle wrapper --gradle-version 8.13 --distribution-type all
         chmod +x ./gradlew || true
         if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
           base64 -d debug.keystore.base64 > debug.keystore || true
@@ -51,7 +51,7 @@ jobs:
 
     - name: Build Debug APK
       run: |
-        ./gradlew :app:assembleDebug --stacktrace --no-daemon --no-configuration-cache -x test -x lint -x check || gradle :app:assembleDebug --stacktrace --no-daemon --no-configuration-cache -x test -x lint -x check
+        gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check || ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4

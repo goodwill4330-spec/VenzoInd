@@ -27,8 +27,8 @@ jobs:
     - name: Accept Android SDK Licenses & Install Components
       run: |
         yes | sdkmanager --licenses || true
-        sdkmanager --install "platforms;android-36" "build-tools;36.0.0" --channel=3 || true
-        sdkmanager --install "platforms;android-35" "build-tools;35.0.0" || true
+        sdkmanager --install "platforms;android-36" "build-tools;36.0.0" || true
+        sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
@@ -77,9 +77,11 @@ EOF
       env:
         GEMINI_API_KEY: "AIzaSyFakeKeyForCiWorkflowOnly12345"
         FIREBASE_APPCHECK_DEBUG_TOKEN: ""
+        JAVA_HOME: /usr/lib/jvm/temurin-21-jdk-amd64
       run: |
         mkdir -p app/build/outputs/apk/debug
-        ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests || gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug
+        export ANDROID_HOME=$ANDROID_SDK_ROOT
+        ./gradlew :app:assembleDebug --stacktrace --no-daemon --scan=false -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4

@@ -28,7 +28,11 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: 'gradle'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
 
       - name: Setup Environment Files
         run: |
@@ -42,10 +46,12 @@ jobs:
           if [ ! -f "debug.keystore" ]; then
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
           fi
-          chmod +x ./gradlew
+          gradle wrapper --gradle-version 8.13 --distribution-type all || true
+          chmod +x ./gradlew || true
 
       - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
+        run: |
+          gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4

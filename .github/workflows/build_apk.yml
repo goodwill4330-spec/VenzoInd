@@ -19,10 +19,6 @@ jobs:
     name: Build VenzoInd APK
     runs-on: ubuntu-latest
 
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -33,24 +29,21 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
 
-      - name: Accept Android SDK Licenses & Install Android 36 SDK
+      - name: Accept Licenses & Install Android 36 Platform
         run: |
-          mkdir -p "$ANDROID_HOME/licenses"
-          printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78717b9d04596d004d\n84831b9409646a578e447d4525d71a64ecd30130\n" > "$ANDROID_HOME/licenses/android-sdk-license"
-          printf "84831b9409646a578e447d4525d71a64ecd30130\n" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install --channel=3 "platforms;android-36" "build-tools;36.0.0" || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install --channel=0 "platforms;android-36" "build-tools;36.0.0" || true
+          yes | sdkmanager --licenses || true
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
 
-      - name: Prepare Secrets & Configuration Files
+      - name: Prepare Secrets, Environment & Keystore
         run: |
-          printf "sdk.dir=/usr/local/lib/android/sdk\n" > local.properties
           printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env
           printf "GEMINI_API_KEY=\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env.example
           printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > secrets.properties

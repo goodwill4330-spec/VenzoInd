@@ -27,16 +27,9 @@ jobs:
     - name: Accept Android SDK Licenses & Install Components
       run: |
         yes | sdkmanager --licenses || true
-        sdkmanager --install "platforms;android-36" "build-tools;36.0.0" || true
-        sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+        sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
-      with:
-        gradle-version: '8.13'
-        cache-disabled: true
-
-    - name: Prepare Keystore and Environment
+    - name: Prepare Environment Files and Keys
       run: |
         cat << 'EOF' > .env
 GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
@@ -47,11 +40,11 @@ GEMINI_API_KEY=
 FIREBASE_APPCHECK_DEBUG_TOKEN=
 EOF
         cat << 'EOF' > secrets.properties
-GEMINI_API_KEY=
+GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
 FIREBASE_APPCHECK_DEBUG_TOKEN=
 EOF
         cat << 'EOF' > local.defaults.properties
-GEMINI_API_KEY=
+GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
 FIREBASE_APPCHECK_DEBUG_TOKEN=
 EOF
         mkdir -p app
@@ -70,15 +63,15 @@ EOF
         if [ ! -f "debug.keystore" ]; then
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
         fi
-        chmod +x ./gradlew || true
+        chmod +x gradlew || true
 
-    - name: Build Debug APK
+    - name: Build Debug APK with Gradle Wrapper
       env:
         GEMINI_API_KEY: "AIzaSyFakeKeyForCiWorkflowOnly12345"
         FIREBASE_APPCHECK_DEBUG_TOKEN: ""
       run: |
         mkdir -p app/build/outputs/apk/debug
-        gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests || ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
+        ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
@@ -86,3 +79,4 @@ EOF
         name: BharatChat-Debug-APK
         path: app/build/outputs/apk/debug/*.apk
         retention-days: 14
+

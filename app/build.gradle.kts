@@ -19,8 +19,6 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    buildConfigField("String", "GEMINI_API_KEY", "\"\"")
-    buildConfigField("String", "FIREBASE_APPCHECK_DEBUG_TOKEN", "\"\"")
   }
 
   signingConfigs {

@@ -10,6 +10,9 @@ jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout
@@ -23,8 +26,8 @@ jobs:
 
       - name: Set up Android SDK & Licenses
         run: |
-          export ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}
-          export ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$ANDROID_HOME}
+          # Grant write permissions to the Android SDK directory for the runner user
+          sudo chown -R $USER:$USER /usr/local/lib/android/sdk 2>/dev/null || true
           
           mkdir -p "$ANDROID_HOME/licenses" || true
           mkdir -p "$ANDROID_SDK_ROOT/licenses" || true
@@ -32,13 +35,16 @@ jobs:
           # Pre-accept all Android SDK licenses
           printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n84831b9409646a918e30573bab4c9c91346d8abd\n" > "$ANDROID_HOME/licenses/android-sdk-license" || true
           printf "84831b9409646a918e30573bab4c9c91346d8abd\n504667f4c0de7af1a06de9f4b1727b84351f2910\n" > "$ANDROID_HOME/licenses/android-sdk-preview-license" || true
+          printf "601085b94cd77f6b44b86ee5009d70427e523b70\n" > "$ANDROID_HOME/licenses/android-googletv-license" || true
+          printf "33b6a2b64920216427e14ba3d7b2183d657531d0\n" > "$ANDROID_HOME/licenses/google-gdk-license" || true
+          printf "e9acab5b5fbb5186e0627d296604266aea4c82da\n" > "$ANDROID_HOME/licenses/mips-android-sysimage-license" || true
           
           cp -r "$ANDROID_HOME/licenses" "$ANDROID_SDK_ROOT/" 2>/dev/null || true
           
           SDKMANAGER=$(which sdkmanager 2>/dev/null || echo "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager")
           if [ -x "$SDKMANAGER" ]; then
             yes | "$SDKMANAGER" --licenses || true
-            "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" || true
+            "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools" || true
           fi
           
           echo "sdk.dir=$ANDROID_HOME" > local.properties
@@ -74,7 +80,7 @@ jobs:
         run: |
           gradle wrapper --gradle-version 9.3.1 --distribution-type bin
           chmod +x ./gradlew
-          ./gradlew :app:assembleDebug --stacktrace
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -82,4 +88,5 @@ jobs:
           name: VenzoInd-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
+
 

@@ -29,10 +29,15 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Environment Files & Keystore
+      - name: Setup Environment Files, Google Services & Keystore
         run: |
           yes | sdkmanager --licenses || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
@@ -41,6 +46,10 @@ jobs:
           printf "GEMINI_API_KEY=\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env.example
           printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > secrets.properties
           printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > local.defaults.properties
+          mkdir -p app
+          if [ ! -f "app/google-services.json" ]; then
+            printf '{\n  "project_info": { "project_number": "505106989844", "project_id": "bharatchat-sovereign", "storage_bucket": "bharatchat-sovereign.appspot.com" },\n  "client": [ { "client_info": { "mobilesdk_app_id": "1:505106989844:android:bharatchat", "android_client_info": { "package_name": "com.aistudio.bharatchat.vnrkzp" } }, "oauth_client": [], "api_key": [ { "current_key": "AIzaSyB0haratChatSecureFallbackKey2026" } ], "services": { "appinvite_service": { "other_platform_oauth_client": [] } } } ],\n  "configuration_version": "1"\n}\n' > app/google-services.json
+          fi
           if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
             base64 -d debug.keystore.base64 > debug.keystore || true
           fi
@@ -48,11 +57,9 @@ jobs:
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
           fi
 
-      - name: Build Debug APK with Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
-          arguments: ':app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests'
+      - name: Build Debug APK
+        run: |
+          gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4

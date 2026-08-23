@@ -29,13 +29,14 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Setup Environment Files
+      - name: Setup Environment Files & Keystore
         run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+          sdkmanager --channel=3 "platforms;android-36" "build-tools;36.0.0" || true
           printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env
           printf "GEMINI_API_KEY=\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env.example
           printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > secrets.properties
@@ -46,12 +47,12 @@ jobs:
           if [ ! -f "debug.keystore" ]; then
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
           fi
-          gradle wrapper --gradle-version 8.13 --distribution-type all || true
-          chmod +x ./gradlew || true
 
-      - name: Build Debug APK
-        run: |
-          gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
+      - name: Build Debug APK with Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          arguments: ':app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests'
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4

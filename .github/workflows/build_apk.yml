@@ -20,17 +20,14 @@ jobs:
       with:
         java-version: '21'
         distribution: 'temurin'
+        cache: gradle
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Accept Android SDK Licenses & Install Components
+    - name: Prepare Environment and Dependencies
       run: |
         yes | sdkmanager --licenses || true
-        sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
-
-    - name: Prepare Environment Files and Keys
-      run: |
         cat << 'EOF' > .env
 GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
 FIREBASE_APPCHECK_DEBUG_TOKEN=
@@ -63,12 +60,13 @@ EOF
         if [ ! -f "debug.keystore" ]; then
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
         fi
-        chmod +x gradlew || true
+        chmod +x ./gradlew || true
 
     - name: Build Debug APK with Gradle Wrapper
       env:
         GEMINI_API_KEY: "AIzaSyFakeKeyForCiWorkflowOnly12345"
         FIREBASE_APPCHECK_DEBUG_TOKEN: ""
+        ANDROID_HOME: /usr/local/lib/android/sdk
       run: |
         mkdir -p app/build/outputs/apk/debug
         ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests

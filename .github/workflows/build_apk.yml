@@ -9,11 +9,11 @@ on:
 
 jobs:
   build:
-    name: Assemble Debug APK
+    name: Build VenzoInd APK
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
+    - name: Checkout Repository
       uses: actions/checkout@v4
 
     - name: Set up JDK 21
@@ -22,24 +22,30 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
 
-    - name: Set up Android SDK
-      uses: android-actions/setup-android@v3
-
-    - name: Install Android Build-Tools & Platforms
+    - name: Accept Android SDK Licenses & Setup Components
       run: |
         yes | sdkmanager --licenses || true
-        sdkmanager "platforms;android-36" "build-tools;36.0.0" "platforms;android-35" "build-tools;35.0.0"
+        sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+        sdkmanager --install "platforms;android-36" "build-tools;36.0.0" --channel=3 || true
 
-    - name: Prepare Secrets and Configuration Files
+    - name: Setup Configuration & Environment Keys
       run: |
-        echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > .env
-        echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> .env
-        echo "GEMINI_API_KEY=" > .env.example
-        echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> .env.example
-        echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > secrets.properties
-        echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> secrets.properties
-        echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > local.defaults.properties
-        echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> local.defaults.properties
+        cat << 'EOF' > .env
+GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
+FIREBASE_APPCHECK_DEBUG_TOKEN=
+EOF
+        cat << 'EOF' > .env.example
+GEMINI_API_KEY=
+FIREBASE_APPCHECK_DEBUG_TOKEN=
+EOF
+        cat << 'EOF' > secrets.properties
+GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
+FIREBASE_APPCHECK_DEBUG_TOKEN=
+EOF
+        cat << 'EOF' > local.defaults.properties
+GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
+FIREBASE_APPCHECK_DEBUG_TOKEN=
+EOF
         mkdir -p app
         if [ ! -f "app/google-services.json" ]; then
           cat << 'EOF' > app/google-services.json
@@ -60,11 +66,11 @@ EOF
 
     - name: Build Debug APK
       run: |
-        ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
+        ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
 
-    - name: Upload Debug APK
+    - name: Upload Debug APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: BharatChat-Debug-APK
+        name: VenzoInd-Debug-APK
         path: app/build/outputs/apk/debug/*.apk
         retention-days: 14

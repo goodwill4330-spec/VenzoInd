@@ -1,22 +1,18 @@
 name: Build Android APK
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-      - master
-  workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   build:
-    name: Build VenzoInd APK
+    name: Build APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
@@ -28,22 +24,18 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Prepare Secrets and Environment Files
+      - name: Prepare Android SDK
         run: |
-          mkdir -p "$ANDROID_HOME/licenses" || true
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$ANDROID_HOME/licenses/android-sdk-license"
-          echo "d56f5187479451eabf01fb78717b9d04596d004d" >> "$ANDROID_HOME/licenses/android-sdk-license"
-          echo "84831b9409646a578e447d4525d71a64ecd30130" >> "$ANDROID_HOME/licenses/android-sdk-license"
-          echo "84831b9409646a578e447d4525d71a64ecd30130" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" || true
 
+      - name: Prepare Config and Secrets
+        run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-          cat << 'EOF' > .env
-GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
-FIREBASE_APPCHECK_DEBUG_TOKEN=
-EOF
+          echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > .env
+          echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> .env
+
           cp .env .env.example
           cp .env secrets.properties
           cp .env local.defaults.properties
@@ -95,13 +87,16 @@ EOF
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
           fi
 
-      - name: Build Debug APK with Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-          arguments: ':app:assembleDebug -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests'
 
-      - name: Upload Debug APK Artifact
+      - name: Build APK with Gradle
+        run: |
+          gradle :app:assembleDebug -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
+
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: VenzoInd-Debug-APK

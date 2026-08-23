@@ -9,6 +9,7 @@ on:
 
 jobs:
   build:
+    name: Assemble Debug APK
     runs-on: ubuntu-latest
 
     steps:
@@ -21,7 +22,15 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
 
-    - name: Prepare Secrets and Environment
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install Android Build-Tools & Platforms
+      run: |
+        yes | sdkmanager --licenses || true
+        sdkmanager "platforms;android-36" "build-tools;36.0.0" "platforms;android-35" "build-tools;35.0.0"
+
+    - name: Prepare Secrets and Configuration Files
       run: |
         echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > .env
         echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> .env
@@ -51,7 +60,7 @@ EOF
 
     - name: Build Debug APK
       run: |
-        ./gradlew assembleDebug --stacktrace --no-daemon -x test -x lint -x check
+        ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4

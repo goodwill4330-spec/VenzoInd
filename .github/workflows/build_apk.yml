@@ -2,10 +2,17 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [ "main", "master" ]
+    branches:
+      - main
+      - master
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -13,64 +20,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 21
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        distribution: 'temurin'
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
 
-    - name: Accept Android SDK Licenses & Setup Components
-      run: |
-        yes | sdkmanager --licenses || true
-        sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
-        sdkmanager --install "platforms;android-36" "build-tools;36.0.0" --channel=3 || true
+      - name: Setup Environment Files
+        run: |
+          printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env
+          printf "GEMINI_API_KEY=\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env.example
+          printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > secrets.properties
+          printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > local.defaults.properties
+          if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore || true
+          fi
+          if [ ! -f "debug.keystore" ]; then
+            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
+          fi
+          chmod +x ./gradlew
 
-    - name: Setup Configuration & Environment Keys
-      run: |
-        cat << 'EOF' > .env
-GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
-FIREBASE_APPCHECK_DEBUG_TOKEN=
-EOF
-        cat << 'EOF' > .env.example
-GEMINI_API_KEY=
-FIREBASE_APPCHECK_DEBUG_TOKEN=
-EOF
-        cat << 'EOF' > secrets.properties
-GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
-FIREBASE_APPCHECK_DEBUG_TOKEN=
-EOF
-        cat << 'EOF' > local.defaults.properties
-GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
-FIREBASE_APPCHECK_DEBUG_TOKEN=
-EOF
-        mkdir -p app
-        if [ ! -f "app/google-services.json" ]; then
-          cat << 'EOF' > app/google-services.json
-{
-  "project_info": { "project_number": "505106989844", "project_id": "bharatchat-sovereign", "storage_bucket": "bharatchat-sovereign.appspot.com" },
-  "client": [ { "client_info": { "mobilesdk_app_id": "1:505106989844:android:bharatchat", "android_client_info": { "package_name": "com.aistudio.bharatchat.vnrkzp" } }, "oauth_client": [], "api_key": [ { "current_key": "AIzaSyB0haratChatSecureFallbackKey2026" } ], "services": { "appinvite_service": { "other_platform_oauth_client": [] } } } ],
-  "configuration_version": "1"
-}
-EOF
-        fi
-        if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
-          base64 -d debug.keystore.base64 > debug.keystore || true
-        fi
-        if [ ! -f "debug.keystore" ]; then
-          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
-        fi
-        chmod +x ./gradlew
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check
 
-    - name: Build Debug APK
-      run: |
-        ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
-
-    - name: Upload Debug APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: VenzoInd-Debug-APK
-        path: app/build/outputs/apk/debug/*.apk
-        retention-days: 14
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VenzoInd-Debug-APK
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14

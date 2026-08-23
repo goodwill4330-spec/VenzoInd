@@ -20,30 +20,17 @@ jobs:
       with:
         java-version: '21'
         distribution: 'temurin'
-        cache: gradle
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-
-    - name: Prepare Environment and Dependencies
+    - name: Prepare Secrets and Environment
       run: |
-        yes | sdkmanager --licenses || true
-        cat << 'EOF' > .env
-GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
-FIREBASE_APPCHECK_DEBUG_TOKEN=
-EOF
-        cat << 'EOF' > .env.example
-GEMINI_API_KEY=
-FIREBASE_APPCHECK_DEBUG_TOKEN=
-EOF
-        cat << 'EOF' > secrets.properties
-GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
-FIREBASE_APPCHECK_DEBUG_TOKEN=
-EOF
-        cat << 'EOF' > local.defaults.properties
-GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
-FIREBASE_APPCHECK_DEBUG_TOKEN=
-EOF
+        echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > .env
+        echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> .env
+        echo "GEMINI_API_KEY=" > .env.example
+        echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> .env.example
+        echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > secrets.properties
+        echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> secrets.properties
+        echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > local.defaults.properties
+        echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> local.defaults.properties
         mkdir -p app
         if [ ! -f "app/google-services.json" ]; then
           cat << 'EOF' > app/google-services.json
@@ -60,16 +47,11 @@ EOF
         if [ ! -f "debug.keystore" ]; then
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
         fi
-        chmod +x ./gradlew || true
+        chmod +x ./gradlew
 
-    - name: Build Debug APK with Gradle Wrapper
-      env:
-        GEMINI_API_KEY: "AIzaSyFakeKeyForCiWorkflowOnly12345"
-        FIREBASE_APPCHECK_DEBUG_TOKEN: ""
-        ANDROID_HOME: /usr/local/lib/android/sdk
+    - name: Build Debug APK
       run: |
-        mkdir -p app/build/outputs/apk/debug
-        ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
+        ./gradlew assembleDebug --stacktrace --no-daemon -x test -x lint -x check
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
@@ -77,4 +59,3 @@ EOF
         name: BharatChat-Debug-APK
         path: app/build/outputs/apk/debug/*.apk
         retention-days: 14
-

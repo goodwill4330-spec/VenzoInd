@@ -59,6 +59,14 @@ enum class ChatFilter {
     BUSINESS
 }
 
+data class ZoomableDpData(
+    val imageUri: String? = null,
+    val title: String = "",
+    val initial: String = "VA",
+    val colorHex: String = "#FF671F",
+    val subtitle: String? = null
+)
+
 data class ActiveCallState(
     val contactName: String = "",
     val contactAvatar: String = "",
@@ -300,8 +308,17 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     val showWallpaperSheet = MutableStateFlow(false)
     val showDisappearingTimerDialog = MutableStateFlow(false)
     val showPollCreatorDialog = MutableStateFlow(false)
+    val showLocationShareSheet = MutableStateFlow(false)
+    val showCloudDocPickerSheet = MutableStateFlow(false)
     val showAttachmentOptions = MutableStateFlow(false)
     val showSecretChatInfo = MutableStateFlow(false)
+    val showScheduleMessageDialog = MutableStateFlow(false)
+    val showForwardDialog = MutableStateFlow(false)
+    val forwardSelectedMessages = MutableStateFlow<List<MessageEntity>>(emptyList())
+    val showContactProfileDialog = MutableStateFlow(false)
+    val activeContactProfile = MutableStateFlow<ContactEntity?>(null)
+    val showZoomableDpDialog = MutableStateFlow(false)
+    val activeZoomableDp = MutableStateFlow<ZoomableDpData?>(null)
 
     // Biometric Security Gate State for UPI & Transactions
     val isUpiBiometricUnlocked = MutableStateFlow(false)
@@ -448,7 +465,11 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun sendMessage(text: String) {
+    fun sendMessage(
+        text: String,
+        replyToText: String? = null,
+        replyToSender: String? = null
+    ) {
         val chatId = _activeChatId.value ?: return
         if (text.isBlank()) return
         val chat = _activeChat.value
@@ -459,7 +480,9 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 text = text,
                 messageType = MessageType.TEXT,
                 isSecret = chat?.isSecret == true,
-                expireSeconds = chat?.disappearingSeconds ?: 0
+                expireSeconds = chat?.disappearingSeconds ?: 0,
+                replyToText = replyToText,
+                replyToSender = replyToSender
             )
 
             // Update smart replies
@@ -605,7 +628,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             repository.sendMessage(
                 chatId = chatId,
-                text = "Poll: $question",
+                text = "📊 Poll: $question",
                 messageType = MessageType.POLL,
                 pollQuestion = question,
                 pollOptionsJson = optJson
@@ -614,11 +637,139 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun votePoll(messageId: String, optionIndex: Int) {
+        viewModelScope.launch {
+            repository.votePoll(messageId, optionIndex)
+        }
+    }
+
+    fun sendLocationMessage(locationName: String, address: String, lat: Double, lng: Double) {
+        val chatId = _activeChatId.value ?: return
+        viewModelScope.launch {
+            repository.sendMessage(
+                chatId = chatId,
+                text = "$locationName • $address",
+                messageType = MessageType.LOCATION,
+                attachmentUrl = "geo:$lat,$lng?q=$lat,$lng($locationName)",
+                fileSizeStr = "GPS: %.4f° N, %.4f° E".format(lat, lng)
+            )
+            showLocationShareSheet.value = false
+        }
+    }
+
     fun translateMessage(msgId: String, text: String, targetLanguage: String) {
         viewModelScope.launch {
             repository.translateMessage(msgId, text, targetLanguage)
             showAiTranslatorDialog.value = false
         }
+    }
+
+    fun sendImageMessage(imageUri: String, caption: String = "") {
+        val chatId = _activeChatId.value ?: return
+        viewModelScope.launch {
+            repository.sendMessage(
+                chatId = chatId,
+                text = caption.ifBlank { "📷 Photo" },
+                messageType = MessageType.IMAGE,
+                attachmentUrl = imageUri,
+                fileSizeStr = "High Res • Sovereign Protected"
+            )
+            showAttachmentOptions.value = false
+        }
+    }
+
+    fun scheduleMessage(chatId: String, text: String, scheduledTimestamp: Long, scheduleDescription: String = "") {
+        viewModelScope.launch {
+            val formattedTime = SimpleDateFormat("hh:mm a, dd MMM", Locale.getDefault()).format(Date(scheduledTimestamp))
+            val label = if (scheduleDescription.isNotBlank()) scheduleDescription else formattedTime
+            repository.sendMessage(
+                chatId = chatId,
+                text = "⏰ [Scheduled for $label]\n$text",
+                messageType = MessageType.TEXT
+            )
+            showScheduleMessageDialog.value = false
+        }
+    }
+
+    fun toggleStarMessage(messageId: String) {
+        viewModelScope.launch {
+            repository.toggleStarMessage(messageId)
+        }
+    }
+
+    fun deleteMessages(messageIds: List<String>) {
+        viewModelScope.launch {
+            repository.deleteMultipleMessages(messageIds)
+        }
+    }
+
+    fun forwardMessages(targetChatIds: List<String>, messages: List<MessageEntity>) {
+        viewModelScope.launch {
+            targetChatIds.forEach { targetId ->
+                messages.forEach { msg ->
+                    val forwardPrefix = "↪️ Forwarded\n"
+                    val forwardType = try { MessageType.valueOf(msg.messageType) } catch (e: Exception) { MessageType.TEXT }
+                    repository.sendMessage(
+                        chatId = targetId,
+                        text = if (forwardType == MessageType.TEXT) forwardPrefix + msg.text else msg.text,
+                        messageType = forwardType,
+                        attachmentUrl = msg.attachmentUrl,
+                        fileSizeStr = msg.fileSizeStr,
+                        audioWaveform = msg.audioWaveform,
+                        voiceDurationSec = msg.voiceDurationSec,
+                        upiAmount = msg.upiAmount
+                    )
+                }
+            }
+            showForwardDialog.value = false
+            forwardSelectedMessages.value = emptyList()
+        }
+    }
+
+    fun openContactProfile(contact: ContactEntity) {
+        activeContactProfile.value = contact
+        showContactProfileDialog.value = true
+    }
+
+    fun openContactProfileFromChat(chat: ChatEntity) {
+        val contact = ContactEntity(
+            id = chat.id,
+            name = chat.title,
+            phone = if (chat.id == "chat_ai_assistant") "+91-BHARAT-AI" else "+91 98765 ${Math.abs(chat.id.hashCode()).toString().takeLast(5).padStart(5, '0')}",
+            upiVpa = "${chat.title.lowercase().replace(" ", "")}@upi",
+            avatarInitial = chat.avatarInitial,
+            avatarColorHex = chat.avatarColorHex,
+            statusMsg = chat.subtitle.ifBlank { "Available on VenzoInd Sovereign Chat" },
+            isBharatChatUser = true,
+            isFavorite = chat.isPinned,
+            publicKeyFingerprint = "KYBER-1024-${Math.abs(chat.id.hashCode()).toString(16).uppercase().take(8)}",
+            lastSeenTimestamp = System.currentTimeMillis(),
+            profilePicUri = null
+        )
+        activeContactProfile.value = contact
+        showContactProfileDialog.value = true
+    }
+
+    fun openZoomableDp(
+        title: String,
+        imageUri: String? = null,
+        initial: String = "VA",
+        colorHex: String = "#FF671F",
+        subtitle: String? = null
+    ) {
+        activeZoomableDp.value = ZoomableDpData(
+            imageUri = imageUri,
+            title = title,
+            initial = initial,
+            colorHex = colorHex,
+            subtitle = subtitle
+        )
+        showZoomableDpDialog.value = true
+    }
+
+    fun closeZoomableDp() {
+        showZoomableDpDialog.value = false
+        activeZoomableDp.value = null
     }
 
     fun summarizeActiveChat() {

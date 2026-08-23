@@ -45,6 +45,7 @@ import coil.compose.AsyncImage
 import com.example.data.local.UserProfileDataStore
 import com.example.data.model.UserProfile
 import com.example.ui.components.GlassCard
+import com.example.ui.components.ProfileCameraCaptureDialog
 import com.example.ui.components.QuantumShieldBadge
 import com.example.ui.components.TricolorGlowPill
 import com.example.ui.components.VerifiedBadge
@@ -159,6 +160,7 @@ fun UserProfileScreen(
     var isSaving by remember { mutableStateOf(false) }
     var showSavedNotification by remember { mutableStateOf(false) }
     var showAvatarPickerSheet by remember { mutableStateOf(false) }
+    var showCameraCaptureDialog by remember { mutableStateOf(false) }
 
     // Camera and Gallery ActivityResult launchers
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -179,43 +181,9 @@ fun UserProfileScreen(
         }
     }
 
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap: Bitmap? ->
-        if (bitmap != null) {
-            try {
-                val cachedUri = saveBitmapToCache(context, bitmap)
-                profilePicUri = cachedUri.toString()
-                selectedAvatarIndex = -1 // custom photo flag
-                showAvatarPickerSheet = false
-                Toast.makeText(context, "Photo captured from Camera", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(context, "Failed to save photo: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            cameraLauncher.launch(null)
-        } else {
-            Toast.makeText(context, "Camera permission is required to capture a photo", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     val onCameraAction = {
-        val hasPermission = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (hasPermission) {
-            cameraLauncher.launch(null)
-        } else {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
+        showAvatarPickerSheet = false
+        showCameraCaptureDialog = true
     }
 
     // Calculate avatar initials dynamically
@@ -1474,5 +1442,16 @@ fun UserProfileScreen(
                 }
             }
         }
+    }
+
+    if (showCameraCaptureDialog) {
+        ProfileCameraCaptureDialog(
+            onDismiss = { showCameraCaptureDialog = false },
+            onPhotoConfirmed = { uri, _ ->
+                profilePicUri = uri.toString()
+                selectedAvatarIndex = -1
+                Toast.makeText(context, "Profile picture updated from Camera", Toast.LENGTH_SHORT).show()
+            }
+        )
     }
 }

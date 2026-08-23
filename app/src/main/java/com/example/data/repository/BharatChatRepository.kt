@@ -63,7 +63,9 @@ class BharatChatRepository(
         pollQuestion: String? = null,
         pollOptionsJson: String? = null,
         isSecret: Boolean = false,
-        expireSeconds: Int = 0
+        expireSeconds: Int = 0,
+        replyToText: String? = null,
+        replyToSender: String? = null
     ) {
         val now = System.currentTimeMillis()
         val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(now))
@@ -92,7 +94,10 @@ class BharatChatRepository(
             pollOptionsJson = pollOptionsJson,
             pollVotesJson = if (pollOptionsJson != null) "{\"0\": 0, \"1\": 0, \"2\": 0}" else null,
             isSecretExpiring = isSecret && expireSeconds > 0,
-            expireTimeMillis = if (isSecret && expireSeconds > 0) now + (expireSeconds * 1000L) else 0L
+            expireTimeMillis = if (isSecret && expireSeconds > 0) now + (expireSeconds * 1000L) else 0L,
+            isStarred = false,
+            replyToText = replyToText,
+            replyToSender = replyToSender
         )
 
         messageDao.insertMessage(message)
@@ -103,6 +108,7 @@ class BharatChatRepository(
             MessageType.FILE -> "📁 Document ($fileSizeStr)"
             MessageType.IMAGE -> "📷 Photo"
             MessageType.POLL -> "📊 Poll: $pollQuestion"
+            MessageType.LOCATION -> "📍 Live Location: $text"
             else -> text
         }
 
@@ -167,6 +173,41 @@ class BharatChatRepository(
     suspend fun translateMessage(messageId: String, text: String, targetLang: String) {
         val translated = aiService.translateText(text, targetLang)
         messageDao.updateTranslation(messageId, translated, targetLang)
+    }
+
+    suspend fun toggleStarMessage(messageId: String) {
+        messageDao.toggleStarMessage(messageId)
+    }
+
+    suspend fun deleteMultipleMessages(messageIds: List<String>) {
+        messageDao.deleteMultipleMessages(messageIds)
+    }
+
+    suspend fun votePoll(messageId: String, optionIndex: Int) {
+        val msg = messageDao.getMessageById(messageId) ?: return
+        val currentVotes = try {
+            val json = msg.pollVotesJson ?: "{}"
+            val map = mutableMapOf<String, Int>()
+            val cleaned = json.replace("{", "").replace("}", "").trim()
+            if (cleaned.isNotBlank()) {
+                cleaned.split(",").forEach {
+                    val parts = it.split(":")
+                    if (parts.size == 2) {
+                        val key = parts[0].replace("\"", "").trim()
+                        val value = parts[1].trim().toIntOrNull() ?: 0
+                        map[key] = value
+                    }
+                }
+            }
+            map
+        } catch (e: Exception) {
+            mutableMapOf<String, Int>()
+        }
+
+        val key = optionIndex.toString()
+        currentVotes[key] = (currentVotes[key] ?: 0) + 1
+        val updatedVotesJson = "{" + currentVotes.map { "\"${it.key}\": ${it.value}" }.joinToString(",") + "}"
+        messageDao.updatePollVotes(messageId, updatedVotesJson)
     }
 
     suspend fun reactToMessage(messageId: String, emoji: String) {

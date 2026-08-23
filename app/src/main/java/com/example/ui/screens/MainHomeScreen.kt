@@ -40,7 +40,6 @@ fun MainHomeScreen(
 
     // Dialog state collectors
     val showNewChat by viewModel.showNewChatSheet.collectAsState()
-    val showDualPhone by viewModel.showDualPhoneSyncDialog.collectAsState()
     val showUpiPay by viewModel.showUpiPaymentSheet.collectAsState()
     val showQrScanner by viewModel.showQrScannerSheet.collectAsState()
     val showAiSummary by viewModel.showAiSummarizerDialog.collectAsState()
@@ -52,6 +51,10 @@ fun MainHomeScreen(
     val incomingUpi by viewModel.incomingUpiEvent.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
     val showBackupRestore by viewModel.showBackupRestoreDialog.collectAsState()
+    val showContactProfile by viewModel.showContactProfileDialog.collectAsState()
+    val activeContactProfile by viewModel.activeContactProfile.collectAsState()
+    val showZoomableDp by viewModel.showZoomableDpDialog.collectAsState()
+    val activeZoomableDp by viewModel.activeZoomableDp.collectAsState()
     var showWhatsAppMenu by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -92,8 +95,6 @@ fun MainHomeScreen(
                                 color = Color(0xFF22C55E)
                             )
                         }
-
-                        TricolorGlowPill(text = "E2EE")
                     }
 
                     // Top Action Icons
@@ -101,35 +102,6 @@ fun MainHomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (syncStatus.activeRole == com.example.data.sync.DeviceRole.PHONE_1) BharatSaffron.copy(alpha = 0.2f) else BharatGreenLight.copy(alpha = 0.2f),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (syncStatus.activeRole == com.example.data.sync.DeviceRole.PHONE_1) BharatSaffron else BharatGreenLight
-                            ),
-                            modifier = Modifier.clickable { viewModel.showDualPhoneSyncDialog.value = true }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Devices,
-                                    contentDescription = "2-Phone Sync",
-                                    tint = if (syncStatus.activeRole == com.example.data.sync.DeviceRole.PHONE_1) BharatSaffron else BharatGreenLight,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = if (syncStatus.activeRole == com.example.data.sync.DeviceRole.PHONE_1) "Phone 1" else "Phone 2",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (syncStatus.activeRole == com.example.data.sync.DeviceRole.PHONE_1) BharatSaffronLight else BharatGreenLight
-                                )
-                            }
-                        }
-
                         IconButton(
                             onClick = { viewModel.navigateTo(com.example.ui.viewmodel.AppScreen.CONTACTS_LIST) },
                             modifier = Modifier.testTag("top_contacts_button")
@@ -217,7 +189,7 @@ fun MainHomeScreen(
                                     text = { Text("Linked devices", color = bColors.textPrimary, fontSize = 14.5.sp) },
                                     onClick = {
                                         showWhatsAppMenu = false
-                                        viewModel.showDualPhoneSyncDialog.value = true
+                                        viewModel.navigateTo(com.example.ui.viewmodel.AppScreen.SETTINGS)
                                     },
                                     leadingIcon = { Icon(Icons.Default.Devices, contentDescription = null, tint = BharatElectricCyan, modifier = Modifier.size(20.dp)) }
                                 )
@@ -367,10 +339,6 @@ fun MainHomeScreen(
         AttachmentOptionsBottomSheet(viewModel = viewModel, onDismiss = { viewModel.showAttachmentOptions.value = false })
     }
 
-    if (showDualPhone) {
-        DualPhoneTestingDialog(viewModel = viewModel, onDismiss = { viewModel.showDualPhoneSyncDialog.value = false })
-    }
-
     if (showBiometricDialog) {
         BiometricAuthDialog(
             purpose = biometricPurpose,
@@ -383,6 +351,25 @@ fun MainHomeScreen(
         com.example.ui.components.BackupRestoreDialog(
             viewModel = viewModel,
             onDismiss = { viewModel.showBackupRestoreDialog.value = false }
+        )
+    }
+
+    if (showContactProfile && activeContactProfile != null) {
+        ContactProfileDialog(
+            viewModel = viewModel,
+            contact = activeContactProfile!!,
+            onDismiss = { viewModel.showContactProfileDialog.value = false }
+        )
+    }
+
+    if (showZoomableDp && activeZoomableDp != null) {
+        com.example.ui.components.ZoomableProfilePicDialog(
+            title = activeZoomableDp!!.title,
+            subtitle = activeZoomableDp!!.subtitle,
+            avatarInitial = activeZoomableDp!!.initial,
+            avatarColorHex = activeZoomableDp!!.colorHex,
+            imageUri = activeZoomableDp!!.imageUri,
+            onDismiss = { viewModel.closeZoomableDp() }
         )
     }
 

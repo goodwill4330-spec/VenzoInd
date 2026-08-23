@@ -15,7 +15,8 @@ enum class MessageType {
     UPI_PAYMENT,
     FILE,
     POLL,
-    SYSTEM_SECURITY
+    SYSTEM_SECURITY,
+    LOCATION
 }
 
 enum class MessageStatus {
@@ -78,7 +79,10 @@ data class MessageEntity(
     val pollOptionsJson: String? = null, // JSON string of PollOption
     val pollVotesJson: String? = null,
     val isSecretExpiring: Boolean = false,
-    val expireTimeMillis: Long = 0L
+    val expireTimeMillis: Long = 0L,
+    val isStarred: Boolean = false,
+    val replyToText: String? = null,
+    val replyToSender: String? = null
 )
 
 @Entity(tableName = "stories")
@@ -151,8 +155,12 @@ data class ContactEntity(
     val isFavorite: Boolean = false,
     val isBlocked: Boolean = false,
     val publicKeyFingerprint: String = "KYBER-1024-DEF78A",
-    val lastSeenTimestamp: Long = System.currentTimeMillis()
-)
+    val lastSeenTimestamp: Long = System.currentTimeMillis(),
+    val profilePicUri: String? = null
+) {
+    val statusBio: String get() = statusMsg
+    val upiId: String get() = upiVpa
+}
 
 data class PollOption(
     val id: Int,

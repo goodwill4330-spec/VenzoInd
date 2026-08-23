@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.ui.components.GlassCard
+import com.example.ui.components.ProfileCameraCaptureDialog
 import com.example.ui.components.VenzoraLogoEmblem
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.BharatChatViewModel
@@ -321,12 +322,15 @@ fun AuthScreen(
     var userNameInput by remember { mutableStateOf("VenzoInd User") }
     var userStatusInput by remember { mutableStateOf("Hey there! I am using VenzoInd.") }
     var customDpUri by remember { mutableStateOf<String?>(null) }
+    var showCameraCaptureDialog by remember { mutableStateOf(false) }
+    var showAvatarOptionsSheet by remember { mutableStateOf(false) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             customDpUri = uri.toString()
+            showAvatarOptionsSheet = false
             Toast.makeText(context, "Profile photo selected", Toast.LENGTH_SHORT).show()
         }
     }
@@ -595,74 +599,103 @@ fun AuthScreen(
 
                         Text(
                             text = "Verifying your number",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
                             color = BharatWhite,
                             textAlign = TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        Row(
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "Waiting to automatically detect an SMS sent to\n${selectedCountry.code} $phoneNumberInput. ",
-                                fontSize = 13.sp,
-                                color = TextSecondaryDark,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 18.sp
-                            )
-                        }
+                        Text(
+                            text = "Waiting to detect an SMS sent to\n${selectedCountry.code} $phoneNumberInput",
+                            fontSize = 13.5.sp,
+                            color = TextSecondaryDark,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
 
                         TextButton(
                             onClick = { currentStep = AuthStep.ENTER_PHONE },
                             contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.testTag("wrong_number_button")
                         ) {
-                            Text("Wrong number?", color = BharatGreenLight, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("Wrong number? Edit", color = BharatGreenLight, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                        // Simulated SMS Notification Card (Instant Autofill)
+                        // High Visibility OTP Banner & 1-Tap Autofill
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = Color(0x3310B981),
-                            border = BorderStroke(1.dp, BharatGreenLight.copy(alpha = 0.5f)),
+                            border = BorderStroke(1.5.dp, BharatGreenLight),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     val chars = generatedOtp.take(6).padEnd(6, '0').map { it.toString() }
                                     otpDigits = chars
+                                    Toast.makeText(context, "OTP $generatedOtp auto-filled!", Toast.LENGTH_SHORT).show()
                                 }
                                 .testTag("sms_autofill_card")
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Sms, contentDescription = null, tint = BharatGreenLight, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(BharatGreenLight.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.MarkEmailRead, contentDescription = null, tint = BharatGreenLight, modifier = Modifier.size(22.dp))
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "Verification Code: ",
+                                            fontSize = 12.sp,
+                                            color = TextSecondaryDark
+                                        )
+                                        Text(
+                                            text = generatedOtp,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = BharatGreenLight,
+                                            letterSpacing = 2.sp
+                                        )
+                                    }
                                     Text(
-                                        text = "VenzoInd Verification Code: $generatedOtp",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = BharatGreenLight
+                                        text = "⚡ Tap here to 1-click auto-fill",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = BharatElectricCyan
                                     )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = BharatGreenLight,
+                                    modifier = Modifier.clickable {
+                                        val chars = generatedOtp.take(6).padEnd(6, '0').map { it.toString() }
+                                        otpDigits = chars
+                                        Toast.makeText(context, "Code inserted!", Toast.LENGTH_SHORT).show()
+                                    }
+                                ) {
                                     Text(
-                                        text = "Tap here to autofill verification code",
+                                        text = "FILL",
+                                        fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp,
-                                        color = TextSecondaryDark
+                                        color = BharatWhite,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                     )
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(28.dp))
+                        Spacer(modifier = Modifier.height(22.dp))
 
                         // 6-digit WhatsApp PIN boxes
                         Row(
@@ -852,7 +885,7 @@ fun AuthScreen(
                                 .clip(CircleShape)
                                 .background(Color(0xFF1E293B))
                                 .border(2.dp, BharatGreenLight, CircleShape)
-                                .clickable { galleryLauncher.launch("image/*") }
+                                .clickable { showAvatarOptionsSheet = true }
                                 .testTag("auth_avatar_picker"),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1115,6 +1148,118 @@ fun AuthScreen(
                     Spacer(modifier = Modifier.height(24.dp))
                 }
             }
+        }
+
+        // Avatar Photo Choice Bottom Sheet (Camera vs Gallery)
+        if (showAvatarOptionsSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showAvatarOptionsSheet = false },
+                containerColor = Color(0xFF0F172A),
+                scrimColor = Color.Black.copy(alpha = 0.6f),
+                dragHandle = {
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 10.dp)
+                            .size(width = 36.dp, height = 4.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF334155))
+                    )
+                }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "Profile Photo",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BharatWhite
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        // Camera Button
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .clickable {
+                                    showAvatarOptionsSheet = false
+                                    showCameraCaptureDialog = true
+                                }
+                                .padding(12.dp)
+                                .testTag("auth_pick_camera_button")
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(60.dp)
+                                    .clip(CircleShape)
+                                    .background(BharatGreenLight.copy(alpha = 0.15f))
+                                    .border(1.dp, BharatGreenLight, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PhotoCamera,
+                                    contentDescription = "Camera",
+                                    tint = BharatGreenLight,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Camera", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = BharatWhite)
+                        }
+
+                        // Gallery Button
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .clickable {
+                                    showAvatarOptionsSheet = false
+                                    galleryLauncher.launch("image/*")
+                                }
+                                .padding(12.dp)
+                                .testTag("auth_pick_gallery_button")
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(60.dp)
+                                    .clip(CircleShape)
+                                    .background(BharatElectricCyan.copy(alpha = 0.15f))
+                                    .border(1.dp, BharatElectricCyan, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PhotoLibrary,
+                                    contentDescription = "Gallery",
+                                    tint = BharatElectricCyan,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Gallery", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = BharatWhite)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        }
+
+        // CameraX Profile Picture Capture Dialog
+        if (showCameraCaptureDialog) {
+            ProfileCameraCaptureDialog(
+                onDismiss = { showCameraCaptureDialog = false },
+                onPhotoConfirmed = { uri, _ ->
+                    customDpUri = uri.toString()
+                    showCameraCaptureDialog = false
+                    Toast.makeText(context, "Profile photo captured", Toast.LENGTH_SHORT).show()
+                }
+            )
         }
     }
 }

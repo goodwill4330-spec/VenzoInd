@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -19,19 +20,31 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
+import com.example.data.model.ChatEntity
+import com.example.data.model.ContactEntity
+import com.example.data.model.MessageEntity
 import com.example.data.model.MessageType
 import com.example.ui.components.IncomingCallOverlay
 import com.example.ui.components.GlassCard
 import com.example.ui.components.QuantumShieldBadge
+import com.example.ui.components.StatusRingAvatar
 import com.example.ui.components.TricolorGlowPill
+import com.example.ui.components.ZoomableProfilePicDialog
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.BharatChatViewModel
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1108,14 +1121,20 @@ fun AiTranslatorDialog(
 @Composable
 fun AttachmentOptionsBottomSheet(
     viewModel: BharatChatViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onPickGallery: (() -> Unit)? = null,
+    onTakePhoto: (() -> Unit)? = null,
+    onRecordAudio: (() -> Unit)? = null,
+    onPickDocument: (() -> Unit)? = null
 ) {
     val bColors = LocalBharatColors.current
 
     val attachmentItems = listOf(
-        Triple("10GB Cloud File", Icons.Default.InsertDriveFile, BharatElectricCyan),
-        Triple("4K Camera Photo", Icons.Default.PhotoCamera, BharatSaffron),
+        Triple("Gallery Photos", Icons.Default.PhotoLibrary, BharatElectricCyan),
+        Triple("Camera Photo", Icons.Default.PhotoCamera, BharatSaffron),
+        Triple("Schedule Message", Icons.Default.Schedule, Color(0xFF38BDF8)),
         Triple("UPI Instant Pay", Icons.Default.CurrencyRupee, BharatGreenLight),
+        Triple("10GB Cloud File", Icons.Default.InsertDriveFile, BharatElectricCyan),
         Triple("Interactive Poll", Icons.Default.Poll, Color(0xFFA855F7)),
         Triple("Live Location", Icons.Default.LocationOn, Color(0xFFF59E0B)),
         Triple("Audio Recording", Icons.Default.Mic, Color(0xFFEC4899))
@@ -1131,15 +1150,23 @@ fun AttachmentOptionsBottomSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            Text(
-                text = "Share & Actions",
-                fontWeight = FontWeight.Bold,
-                fontSize = 17.sp,
-                color = bColors.textPrimary,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Share & Typing Tools",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = bColors.textPrimary
+                )
+                TricolorGlowPill(text = "Sovereign Vault")
+            }
 
-            attachmentItems.chunked(3).forEach { row ->
+            Spacer(modifier = Modifier.height(16.dp))
+
+            attachmentItems.chunked(4).forEach { row ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1150,29 +1177,60 @@ fun AttachmentOptionsBottomSheet(
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
-                                .width(90.dp)
+                                .width(80.dp)
                                 .clickable {
+                                    onDismiss()
                                     when (label) {
-                                        "10GB Cloud File" -> viewModel.sendAttachment(MessageType.FILE, "Sovereign_Project_Doc.pdf", "9.4 GB • Cloud Transfer")
-                                        "4K Camera Photo" -> viewModel.sendAttachment(MessageType.IMAGE, "photo_4k_hdr.jpg", "14.2 MB")
+                                        "Gallery Photos" -> {
+                                            if (onPickGallery != null) {
+                                                onPickGallery()
+                                            } else {
+                                                viewModel.sendAttachment(MessageType.IMAGE, "gallery_photo.jpg", "6.4 MB • High Res")
+                                            }
+                                        }
+                                        "Camera Photo" -> {
+                                            if (onTakePhoto != null) {
+                                                onTakePhoto()
+                                            } else {
+                                                viewModel.sendAttachment(MessageType.IMAGE, "camera_photo_4k.jpg", "14.2 MB • 4K")
+                                            }
+                                        }
+                                        "Schedule Message" -> {
+                                            viewModel.showScheduleMessageDialog.value = true
+                                        }
                                         "UPI Instant Pay" -> {
-                                            viewModel.showAttachmentOptions.value = false
                                             viewModel.showUpiPaymentSheet.value = true
                                         }
+                                        "10GB Cloud File" -> {
+                                            if (onPickDocument != null) {
+                                                onPickDocument()
+                                            } else {
+                                                viewModel.showCloudDocPickerSheet.value = true
+                                            }
+                                        }
                                         "Interactive Poll" -> {
-                                            viewModel.showAttachmentOptions.value = false
                                             viewModel.showPollCreatorDialog.value = true
                                         }
-                                        else -> viewModel.sendAttachment(MessageType.FILE, "sovereign_location.gpx", "1.2 MB")
+                                        "Live Location" -> {
+                                            viewModel.showLocationShareSheet.value = true
+                                        }
+                                        "Audio Recording" -> {
+                                            if (onRecordAudio != null) {
+                                                onRecordAudio()
+                                            } else {
+                                                viewModel.startVoiceRecording()
+                                            }
+                                        }
                                     }
                                 }
+                                .testTag("attachment_item_${label.lowercase().replace(" ", "_")}")
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(52.dp)
                                     .clip(CircleShape)
-                                    .background(color.copy(alpha = 0.2f))
-                                    .border(1.dp, color.copy(alpha = 0.5f), CircleShape),
+                                    .background(color.copy(alpha = 0.18f))
+                                    .border(1.dp, color.copy(alpha = 0.45f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -1188,7 +1246,8 @@ fun AttachmentOptionsBottomSheet(
                                 fontSize = 11.sp,
                                 color = bColors.textPrimary,
                                 textAlign = TextAlign.Center,
-                                maxLines = 2
+                                maxLines = 2,
+                                lineHeight = 13.sp
                             )
                         }
                     }
@@ -1196,265 +1255,6 @@ fun AttachmentOptionsBottomSheet(
             }
 
             Spacer(modifier = Modifier.height(20.dp))
-        }
-    }
-}
-
-@Composable
-fun DualPhoneTestingDialog(
-    viewModel: BharatChatViewModel,
-    onDismiss: () -> Unit
-) {
-    val syncStatus by viewModel.syncStatus.collectAsState()
-    val bColors = LocalBharatColors.current
-    var pairCodeInput by remember { mutableStateOf(syncStatus.pairCode) }
-
-    Dialog(onDismissRequest = onDismiss) {
-        GlassCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            shape = RoundedCornerShape(24.dp),
-            backgroundColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(BharatSaffron.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Devices,
-                                contentDescription = null,
-                                tint = BharatSaffron,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "2-Phone Testing Hub",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = bColors.textPrimary
-                            )
-                            Text(
-                                text = "Dual-Device Realtime Sync",
-                                fontSize = 11.5.sp,
-                                color = BharatElectricCyan
-                            )
-                        }
-                    }
-
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, null, tint = bColors.textSecondary)
-                    }
-                }
-
-                // Active Phone Role Selector
-                Text(
-                    text = "Active Device Identity:",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = bColors.textSecondary
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val isPhone1 = syncStatus.activeRole == com.example.data.sync.DeviceRole.PHONE_1
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isPhone1) BharatSaffron else Color(0x2264748B),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable {
-                                viewModel.switchDeviceRole(com.example.data.sync.DeviceRole.PHONE_1)
-                            }
-                            .testTag("select_phone_1")
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "📱 Phone 1",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = BharatWhite
-                            )
-                            Text(
-                                text = "Vikram Aditya",
-                                fontSize = 10.5.sp,
-                                color = BharatWhite.copy(alpha = 0.9f)
-                            )
-                        }
-                    }
-
-                    val isPhone2 = syncStatus.activeRole == com.example.data.sync.DeviceRole.PHONE_2
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isPhone2) BharatGreenLight else Color(0x2264748B),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable {
-                                viewModel.switchDeviceRole(com.example.data.sync.DeviceRole.PHONE_2)
-                            }
-                            .testTag("select_phone_2")
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "📱 Phone 2",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = BharatWhite
-                            )
-                            Text(
-                                text = "Ananya Sen",
-                                fontSize = 10.5.sp,
-                                color = BharatWhite.copy(alpha = 0.9f)
-                            )
-                        }
-                    }
-                }
-
-                // 4-Digit Sync Pairing Code
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFF0F172A),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x3364748B))
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Pairing Sync Code:",
-                                fontSize = 11.5.sp,
-                                color = TextSecondaryDark
-                            )
-                            TricolorGlowPill(text = "Live Linked")
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = pairCodeInput,
-                                onValueChange = {
-                                    pairCodeInput = it
-                                    viewModel.updatePairCode(it)
-                                },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                                colors = TextFieldDefaults.colors(
-                                    focusedTextColor = BharatWhite,
-                                    unfocusedTextColor = BharatWhite
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = { viewModel.updatePairCode(pairCodeInput) },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = BharatElectricCyan)
-                            ) {
-                                Text("Set", color = DarkBackground, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-
-                // Testing Triggers
-                Text(
-                    text = "Quick Cross-Phone Actions:",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = bColors.textSecondary
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            viewModel.triggerIncomingTestCall(isVideo = false)
-                            onDismiss()
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight),
-                        modifier = Modifier.weight(1f).testTag("trigger_test_call_button")
-                    ) {
-                        Icon(Icons.Default.PhoneCallback, null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Call Me", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Button(
-                        onClick = {
-                            viewModel.triggerIncomingTestUpi(500.0)
-                            onDismiss()
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = BharatSaffron),
-                        modifier = Modifier.weight(1f).testTag("trigger_test_upi_button")
-                    ) {
-                        Icon(Icons.Default.CurrencyRupee, null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Send ₹500", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // Auto Reply Switch
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0x1564748B))
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Auto-Reply from Phone 2",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.5.sp,
-                            color = bColors.textPrimary
-                        )
-                        Text(
-                            text = "Simulates real-time double ticks & answers",
-                            fontSize = 10.5.sp,
-                            color = bColors.textSecondary
-                        )
-                    }
-                    Switch(
-                        checked = syncStatus.autoReplyEnabled,
-                        onCheckedChange = { viewModel.toggleSyncAutoReply(it) }
-                    )
-                }
-            }
         }
     }
 }
@@ -1740,6 +1540,7 @@ fun PollCreatorDialog(
     var question by remember { mutableStateOf("") }
     var opt1 by remember { mutableStateOf("") }
     var opt2 by remember { mutableStateOf("") }
+    var opt3 by remember { mutableStateOf("") }
 
     Dialog(onDismissRequest = onDismiss) {
         GlassCard(
@@ -1782,7 +1583,7 @@ fun PollCreatorDialog(
                 OutlinedTextField(
                     value = opt1,
                     onValueChange = { opt1 = it },
-                    label = { Text("Option 1") },
+                    label = { Text("Option 1 (e.g. Yes / Agree)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1790,7 +1591,15 @@ fun PollCreatorDialog(
                 OutlinedTextField(
                     value = opt2,
                     onValueChange = { opt2 = it },
-                    label = { Text("Option 2") },
+                    label = { Text("Option 2 (e.g. No / Disagree)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = opt3,
+                    onValueChange = { opt3 = it },
+                    label = { Text("Option 3 (Optional)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1798,7 +1607,12 @@ fun PollCreatorDialog(
                 Button(
                     onClick = {
                         if (question.isNotBlank()) {
-                            viewModel.sendMessage("📊 Poll: $question\n1. ${opt1.ifBlank { "Yes" }}\n2. ${opt2.ifBlank { "No" }}")
+                            val options = listOfNotNull(
+                                opt1.ifBlank { "Option 1" },
+                                opt2.ifBlank { "Option 2" },
+                                if (opt3.isNotBlank()) opt3 else null
+                            )
+                            viewModel.sendPoll(question, options)
                             onDismiss()
                         }
                     },
@@ -1809,6 +1623,475 @@ fun PollCreatorDialog(
                     Text("Send Poll to Chat", fontWeight = FontWeight.Bold, color = BharatWhite)
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LocationShareBottomSheet(
+    viewModel: BharatChatViewModel,
+    onDismiss: () -> Unit
+) {
+    val bColors = LocalBharatColors.current
+    val context = LocalContext.current
+    var isLiveDurationPickerOpen by remember { mutableStateOf(false) }
+    var selectedLiveDuration by remember { mutableStateOf("15 minutes") }
+    var liveLocationComment by remember { mutableStateOf("") }
+
+    // Fetch device last known location if possible
+    val currentLocationCoords = remember {
+        var lat = 28.6139
+        var lng = 77.2090
+        try {
+            val locManager = context.getSystemService(android.content.Context.LOCATION_SERVICE) as? android.location.LocationManager
+            val fineGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val coarseGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+            if (fineGranted || coarseGranted) {
+                val lastGps = locManager?.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+                val lastNet = locManager?.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+                val best = lastGps ?: lastNet
+                if (best != null) {
+                    lat = best.latitude
+                    lng = best.longitude
+                }
+            }
+        } catch (e: Exception) {}
+        Pair(lat, lng)
+    }
+
+    val presetLocations = listOf(
+        Triple("Connaught Place, New Delhi", "Central Ring, New Delhi, Delhi 110001", Pair(28.6315, 77.2167)),
+        Triple("Indiranagar 100ft Road", "Bengaluru, Karnataka 560038", Pair(12.9716, 77.5946)),
+        Triple("Bandra Kurla Complex", "Mumbai, Maharashtra 400051", Pair(19.0688, 72.8697)),
+        Triple("Hitech City Cyber Towers", "Hyderabad, Telangana 500081", Pair(17.4504, 78.3808)),
+        Triple("India Gate & Kartavya Path", "Rajpath, New Delhi, Delhi 110001", Pair(28.6129, 77.2295))
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF59E0B).copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Share Location",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        color = bColors.textPrimary
+                    )
+                }
+                TricolorGlowPill(text = "GPS & NavIC")
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            if (!isLiveDurationPickerOpen) {
+                // 1. Share Live Location Banner
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFFF59E0B).copy(alpha = 0.15f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isLiveDurationPickerOpen = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MyLocation,
+                            contentDescription = null,
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Share Live Location",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = bColors.textPrimary
+                            )
+                            Text(
+                                text = "Updates in real-time as you move (15m, 1h, 8h)",
+                                fontSize = 12.sp,
+                                color = bColors.textSecondary
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = null,
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 2. Send Current Location (Fixed Pin)
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = BharatElectricCyan.copy(alpha = 0.12f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.sendLocationMessage(
+                                locationName = "Current Location",
+                                address = "Accurate to 10m • GPS Fix (%.4f, %.4f)".format(currentLocationCoords.first, currentLocationCoords.second),
+                                lat = currentLocationCoords.first,
+                                lng = currentLocationCoords.second
+                            )
+                            Toast.makeText(context, "Current location shared", Toast.LENGTH_SHORT).show()
+                            onDismiss()
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Place,
+                            contentDescription = null,
+                            tint = BharatElectricCyan,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Send Your Current Location",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = bColors.textPrimary
+                            )
+                            Text(
+                                text = "Instant GPS pinpoint (Accurate to 10 meters)",
+                                fontSize = 12.sp,
+                                color = BharatGreenLight
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = "Nearby Places & Landmarks",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = bColors.textSecondary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                presetLocations.forEach { (name, addr, coords) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                viewModel.sendLocationMessage(name, addr, coords.first, coords.second)
+                                onDismiss()
+                            }
+                            .padding(vertical = 10.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Place,
+                            contentDescription = null,
+                            tint = BharatElectricCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = name,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 13.5.sp,
+                                color = bColors.textPrimary
+                            )
+                            Text(
+                                text = addr,
+                                fontSize = 11.5.sp,
+                                color = bColors.textSecondary,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = bColors.glassBorder.copy(alpha = 0.3f), thickness = 0.5.dp)
+                }
+            } else {
+                // Live Location Duration Config
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Share Live Location for:",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = bColors.textPrimary
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        listOf("15 minutes", "1 hour", "8 hours").forEach { duration ->
+                            val isSelected = selectedLiveDuration == duration
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) Color(0xFFF59E0B) else Color(0xFF1E293B),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { selectedLiveDuration = duration }
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = duration,
+                                    textAlign = TextAlign.Center,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) BharatNavy else BharatWhite,
+                                    modifier = Modifier.padding(vertical = 10.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = liveLocationComment,
+                        onValueChange = { liveLocationComment = it },
+                        placeholder = { Text("Add a comment (optional)", color = TextMutedDark, fontSize = 13.sp) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { isLiveDurationPickerOpen = false },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Back")
+                        }
+                        Button(
+                            onClick = {
+                                val label = if (liveLocationComment.isNotBlank()) {
+                                    "Live Location ($selectedLiveDuration) • $liveLocationComment"
+                                } else {
+                                    "Live Location ($selectedLiveDuration)"
+                                }
+                                viewModel.sendLocationMessage(
+                                    locationName = label,
+                                    address = "Live tracking active for $selectedLiveDuration • NavIC GPS",
+                                    lat = currentLocationCoords.first,
+                                    lng = currentLocationCoords.second
+                                )
+                                Toast.makeText(context, "Sharing live location for $selectedLiveDuration", Toast.LENGTH_SHORT).show()
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Share Live", fontWeight = FontWeight.Bold, color = BharatNavy)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CloudDocPickerBottomSheet(
+    viewModel: BharatChatViewModel,
+    onPickSystemFile: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val bColors = LocalBharatColors.current
+    val cloudFiles = listOf(
+        Triple("Sovereign_Project_Specs_2026.pdf", "18.4 MB • Encrypted PDF", Icons.Default.PictureAsPdf),
+        Triple("VenzoInd_Cloud_Architecture_v4.docx", "6.2 MB • Word Document", Icons.Default.Description),
+        Triple("Quantum_Security_Dataset_10GB.zip", "9.8 GB • Sovereign Vault", Icons.Default.FolderZip),
+        Triple("NavIC_Holographic_Map_Asset.pkg", "2.4 GB • Cloud Transfer", Icons.Default.CloudDownload)
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(BharatElectricCyan.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = null,
+                            tint = BharatElectricCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "10GB Cloud Documents",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        color = bColors.textPrimary
+                    )
+                }
+                TricolorGlowPill(text = "10GB Free")
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Browse Device File button
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = BharatElectricCyan.copy(alpha = 0.15f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.4f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        onDismiss()
+                        onPickSystemFile()
+                    }
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FolderOpen,
+                        contentDescription = null,
+                        tint = BharatElectricCyan,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Browse Phone Storage & SD Card",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = bColors.textPrimary
+                        )
+                        Text(
+                            text = "Any file up to 10GB with zero compression",
+                            fontSize = 12.sp,
+                            color = bColors.textSecondary
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ArrowForward,
+                        contentDescription = null,
+                        tint = BharatElectricCyan,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Recent Cloud Vault Files",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                color = bColors.textSecondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            cloudFiles.forEach { (name, size, icon) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                            viewModel.sendAttachment(MessageType.FILE, name, size)
+                            onDismiss()
+                        }
+                        .padding(vertical = 10.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = BharatElectricCyan,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = name,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.5.sp,
+                            color = bColors.textPrimary
+                        )
+                        Text(
+                            text = size,
+                            fontSize = 11.5.sp,
+                            color = BharatGreenLight
+                        )
+                    }
+                }
+                HorizontalDivider(color = bColors.glassBorder.copy(alpha = 0.3f), thickness = 0.5.dp)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }
@@ -2106,6 +2389,858 @@ fun BiometricAuthDialog(
                     ) {
                         Text("Cancel", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ScheduleMessageDialog(
+    chatId: String,
+    onSchedule: (text: String, timestamp: Long, label: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val bColors = LocalBharatColors.current
+    var messageText by remember { mutableStateOf("") }
+    
+    val now = remember { Calendar.getInstance() }
+    var dayOffset by remember { mutableIntStateOf(0) } // 0: Today, 1: Tomorrow, 2: In 2 Days
+    
+    val initialHour12 = remember {
+        val h = now.get(Calendar.HOUR_OF_DAY) % 12
+        if (h == 0) 12 else h
+    }
+    val initialMinute = remember { (now.get(Calendar.MINUTE) + 10) % 60 }
+    val initialIsAm = remember { now.get(Calendar.AM_PM) == Calendar.AM }
+
+    var selectedHour by remember { mutableIntStateOf(initialHour12) }
+    var selectedMinute by remember { mutableIntStateOf(initialMinute) }
+    var isAm by remember { mutableStateOf(initialIsAm) }
+
+    // Calculate actual timestamp
+    val targetCalendar = remember(dayOffset, selectedHour, selectedMinute, isAm) {
+        Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, dayOffset)
+            val hour24 = when {
+                isAm && selectedHour == 12 -> 0
+                !isAm && selectedHour != 12 -> selectedHour + 12
+                else -> selectedHour
+            }
+            set(Calendar.HOUR_OF_DAY, hour24)
+            set(Calendar.MINUTE, selectedMinute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+    }
+
+    val dayLabel = when (dayOffset) {
+        0 -> "Today"
+        1 -> "Tomorrow"
+        else -> "In 2 Days"
+    }
+    val formattedTimeStr = String.format("%02d:%02d %s", selectedHour, selectedMinute, if (isAm) "AM" else "PM")
+    val previewLabel = "$dayLabel at $formattedTimeStr"
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            shape = RoundedCornerShape(26.dp),
+            color = if (bColors.isDark) Color(0xF50B132B) else Color(0xFAF8FAFC),
+            border = androidx.compose.foundation.BorderStroke(
+                1.5.dp,
+                Brush.horizontalGradient(listOf(BharatSaffron, BharatElectricCyan, BharatGreenLight))
+            ),
+            tonalElevation = 12.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(BharatElectricCyan.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = BharatElectricCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Schedule Message",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = bColors.textPrimary
+                            )
+                            Text(
+                                text = "Manual Time Adjustment ⏱️",
+                                fontSize = 11.sp,
+                                color = BharatElectricCyan
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        Icon(Icons.Default.Close, "Close", tint = bColors.textSecondary, modifier = Modifier.size(18.dp))
+                    }
+                }
+
+                // Message Input
+                OutlinedTextField(
+                    value = messageText,
+                    onValueChange = { messageText = it },
+                    placeholder = { Text("Write scheduled message...", fontSize = 13.sp) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 70.dp, max = 110.dp)
+                        .testTag("schedule_message_input"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = BharatElectricCyan,
+                        unfocusedBorderColor = bColors.glassBorder,
+                        focusedTextColor = bColors.textPrimary,
+                        unfocusedTextColor = bColors.textPrimary
+                    )
+                )
+
+                // Date Picker Selector Row
+                Text(
+                    text = "Select Date:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = bColors.textSecondary
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("Today" to 0, "Tomorrow" to 1, "In 2 Days" to 2).forEach { (label, offset) ->
+                        val isSelected = dayOffset == offset
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) BharatSaffron else if (bColors.isDark) Color(0x331E293B) else Color(0x1564748B),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isSelected) BharatSaffron else bColors.glassBorder
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { dayOffset = offset }
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) BharatWhite else bColors.textPrimary,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Manual Time Adjustment Controls (Hours & Minutes Spinners)
+                Text(
+                    text = "Manual Time Adjustment:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = bColors.textSecondary
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Hour Adjuster
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 6.dp)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                selectedHour = if (selectedHour >= 12) 1 else selectedHour + 1
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowUp, null, tint = BharatElectricCyan)
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (bColors.isDark) Color(0xFF1E293B) else Color(0xFFE2E8F0),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.5f)),
+                            modifier = Modifier.size(54.dp, 44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = String.format("%02d", selectedHour),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = bColors.textPrimary
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = {
+                                selectedHour = if (selectedHour <= 1) 12 else selectedHour - 1
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowDown, null, tint = BharatElectricCyan)
+                        }
+                        Text("Hours", fontSize = 10.sp, color = bColors.textMuted)
+                    }
+
+                    Text(":", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = bColors.textPrimary)
+
+                    // Minute Adjuster
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 6.dp)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                selectedMinute = (selectedMinute + 5) % 60
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowUp, null, tint = BharatGreenLight)
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (bColors.isDark) Color(0xFF1E293B) else Color(0xFFE2E8F0),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BharatGreenLight.copy(alpha = 0.5f)),
+                            modifier = Modifier.size(54.dp, 44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = String.format("%02d", selectedMinute),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = bColors.textPrimary
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = {
+                                selectedMinute = if (selectedMinute <= 4) 55 else selectedMinute - 5
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowDown, null, tint = BharatGreenLight)
+                        }
+                        Text("Mins", fontSize = 10.sp, color = bColors.textMuted)
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // AM / PM Switcher
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isAm) BharatSaffron else Color(0x2264748B),
+                            modifier = Modifier
+                                .width(46.dp)
+                                .clickable { isAm = true }
+                        ) {
+                            Text(
+                                text = "AM",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isAm) BharatWhite else bColors.textMuted,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (!isAm) BharatElectricCyan else Color(0x2264748B),
+                            modifier = Modifier
+                                .width(46.dp)
+                                .clickable { isAm = false }
+                        ) {
+                            Text(
+                                text = "PM",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (!isAm) Color(0xFF0F172A) else bColors.textMuted,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Quick Increment Chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("+5m" to 5, "+15m" to 15, "+30m" to 30, "+1 hr" to 60).forEach { (label, minDelta) ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (bColors.isDark) Color(0x2238BDF8) else Color(0x1538BDF8),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x4438BDF8)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    val totalMins = selectedMinute + minDelta
+                                    if (totalMins >= 60) {
+                                        selectedHour = if (selectedHour >= 12) 1 else selectedHour + (totalMins / 60)
+                                        selectedMinute = totalMins % 60
+                                    } else {
+                                        selectedMinute = totalMins
+                                    }
+                                }
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF38BDF8),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Scheduled Live Preview Banner
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = BharatElectricCyan.copy(alpha = 0.12f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.AccessTime, null, tint = BharatElectricCyan, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Deliver: $previewLabel",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BharatElectricCyan
+                        )
+                    }
+                }
+
+                // Confirm Schedule Action Button
+                Button(
+                    onClick = {
+                        if (messageText.isNotBlank()) {
+                            onSchedule(messageText, targetCalendar.timeInMillis, previewLabel)
+                        }
+                    },
+                    enabled = messageText.isNotBlank(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BharatGreenLight,
+                        disabledContainerColor = Color(0x3364748B)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("confirm_schedule_button")
+                ) {
+                    Icon(Icons.Default.ScheduleSend, null, tint = DarkBackground, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Schedule Message",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp,
+                        color = DarkBackground
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ForwardMessageDialog(
+    viewModel: BharatChatViewModel,
+    messages: List<MessageEntity>,
+    onDismiss: () -> Unit
+) {
+    val bColors = LocalBharatColors.current
+    val chats by viewModel.chats.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    val selectedChatIds = remember { mutableStateListOf<String>() }
+
+    val filteredChats = remember(chats, searchQuery) {
+        if (searchQuery.isBlank()) chats
+        else chats.filter { it.title.contains(searchQuery, ignoreCase = true) }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.82f)
+                .padding(12.dp),
+            shape = RoundedCornerShape(26.dp),
+            color = if (bColors.isDark) Color(0xF50B132B) else Color(0xFAF8FAFC),
+            border = androidx.compose.foundation.BorderStroke(
+                1.5.dp,
+                Brush.horizontalGradient(listOf(BharatSaffron, BharatElectricCyan))
+            ),
+            tonalElevation = 14.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "Forward Message",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = bColors.textPrimary
+                        )
+                        Text(
+                            text = "${messages.size} message(s) selected to forward",
+                            fontSize = 12.sp,
+                            color = BharatElectricCyan
+                        )
+                    }
+
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, null, tint = bColors.textSecondary)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Search Bar
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search contact or group...", fontSize = 12.5.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = BharatSaffron, modifier = Modifier.size(18.dp)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = BharatSaffron,
+                        unfocusedBorderColor = bColors.glassBorder,
+                        focusedTextColor = bColors.textPrimary,
+                        unfocusedTextColor = bColors.textPrimary
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // List of Chats & Contacts
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(filteredChats) { chat ->
+                        val isSelected = selectedChatIds.contains(chat.id)
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) {
+                                if (bColors.isDark) Color(0x3310B981) else Color(0x2210B981)
+                            } else {
+                                if (bColors.isDark) Color(0x221E293B) else Color(0x1164748B)
+                            },
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isSelected) BharatGreenLight else bColors.glassBorder
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (isSelected) selectedChatIds.remove(chat.id)
+                                    else selectedChatIds.add(chat.id)
+                                }
+                                .testTag("forward_chat_item_${chat.id}")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    StatusRingAvatar(
+                                        initial = chat.avatarInitial,
+                                        avatarColorHex = chat.avatarColorHex,
+                                        size = 38.dp,
+                                        isOnline = chat.isOnline,
+                                        isAiBot = chat.isAiAssistant
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = chat.title,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = bColors.textPrimary
+                                        )
+                                        Text(
+                                            text = if (chat.isGroup) "Group" else if (chat.isOnline) "Active now" else chat.subtitle,
+                                            fontSize = 11.sp,
+                                            color = bColors.textMuted
+                                        )
+                                    }
+                                }
+
+                                Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = { checked ->
+                                        if (checked) selectedChatIds.add(chat.id)
+                                        else selectedChatIds.remove(chat.id)
+                                    },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = BharatGreenLight,
+                                        checkmarkColor = DarkBackground
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Send Forward Button
+                Button(
+                    onClick = {
+                        if (selectedChatIds.isNotEmpty()) {
+                            viewModel.forwardMessages(selectedChatIds.toList(), messages)
+                        }
+                    },
+                    enabled = selectedChatIds.isNotEmpty(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BharatGreenLight,
+                        disabledContainerColor = Color(0x3364748B)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("send_forward_button")
+                ) {
+                    Icon(Icons.Default.Send, null, tint = DarkBackground, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Forward to ${selectedChatIds.size} Chat(s)",
+                        fontWeight = FontWeight.Bold,
+                        color = DarkBackground,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ContactProfileDialog(
+    contact: ContactEntity,
+    viewModel: BharatChatViewModel,
+    onDismiss: () -> Unit
+) {
+    val bColors = LocalBharatColors.current
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = if (bColors.isDark) Color(0xF50B132B) else Color(0xFAF8FAFC),
+            border = androidx.compose.foundation.BorderStroke(
+                1.5.dp,
+                Brush.horizontalGradient(listOf(BharatSaffron, BharatElectricCyan, BharatGreenLight))
+            ),
+            tonalElevation = 16.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Top header with close
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Contact Profile",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = bColors.textPrimary
+                    )
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(30.dp)) {
+                        Icon(Icons.Default.Close, null, tint = bColors.textSecondary)
+                    }
+                }
+
+                // Profile Avatar / DP with Zoom Click
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(BharatSaffron, BharatElectricCyan)
+                            )
+                        )
+                        .clickable {
+                            viewModel.openZoomableDp(
+                                title = contact.name,
+                                imageUri = contact.profilePicUri,
+                                initial = contact.avatarInitial,
+                                colorHex = contact.avatarColorHex,
+                                subtitle = contact.phone
+                            )
+                        }
+                        .testTag("contact_profile_dp_zoom_trigger"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (contact.profilePicUri != null) {
+                        AsyncImage(
+                            model = contact.profilePicUri,
+                            contentDescription = contact.name,
+                            modifier = Modifier
+                                .size(92.dp)
+                                .clip(CircleShape)
+                        )
+                    } else {
+                        val avatarBg = try {
+                            Color(android.graphics.Color.parseColor(contact.avatarColorHex))
+                        } catch (e: Exception) {
+                            BharatSaffron
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(92.dp)
+                                .clip(CircleShape)
+                                .background(avatarBg),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = contact.avatarInitial,
+                                fontSize = 34.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    // Zoom indicator badge
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(DarkSurfaceElevated)
+                            .border(1.dp, BharatElectricCyan, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ZoomIn,
+                            contentDescription = "Zoom DP",
+                            tint = BharatElectricCyan,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                // Name & Bio
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = contact.name,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = bColors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = contact.statusBio.ifBlank { "Available on VenzoInd Sovereign Chat" },
+                        fontSize = 12.5.sp,
+                        color = bColors.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                // Phone & UPI ID Tiles
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (bColors.isDark) Color(0x331E293B) else Color(0x1564748B),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, bColors.glassBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Phone, null, tint = BharatGreenLight, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(contact.phone, fontSize = 13.sp, color = bColors.textPrimary, fontWeight = FontWeight.SemiBold)
+                            }
+                            QuantumShieldBadge(text = "Kyber-1024")
+                        }
+
+                        if (contact.upiId.isNotBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CurrencyRupee, null, tint = GoldAccent, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(contact.upiId, fontSize = 13.sp, color = bColors.textPrimary, fontWeight = FontWeight.SemiBold)
+                                }
+                                TricolorGlowPill(text = "NPCI UPI")
+                            }
+                        }
+                    }
+                }
+
+                // Quick Action Buttons (Call, Video, UPI, Zoom DP)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Voice Call
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = BharatGreenLight.copy(alpha = 0.2f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BharatGreenLight.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                onDismiss()
+                                viewModel.startCall(contact.name, contact.avatarInitial, isVideo = false)
+                            }
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(vertical = 10.dp)
+                        ) {
+                            Icon(Icons.Default.Phone, null, tint = BharatGreenLight, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Call", fontSize = 11.sp, color = BharatGreenLight, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Video Call
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = BharatElectricCyan.copy(alpha = 0.2f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                onDismiss()
+                                viewModel.startCall(contact.name, contact.avatarInitial, isVideo = true)
+                            }
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(vertical = 10.dp)
+                        ) {
+                            Icon(Icons.Default.Videocam, null, tint = BharatElectricCyan, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Video", fontSize = 11.sp, color = BharatElectricCyan, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Pay UPI
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = BharatSaffron.copy(alpha = 0.2f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BharatSaffron.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                onDismiss()
+                                viewModel.triggerUpiSheetWithBiometrics()
+                            }
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(vertical = 10.dp)
+                        ) {
+                            Icon(Icons.Default.CurrencyRupee, null, tint = BharatSaffron, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Pay UPI", fontSize = 11.sp, color = BharatSaffron, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                // View Zoomed DP Fullscreen Button
+                Button(
+                    onClick = {
+                        viewModel.openZoomableDp(
+                            title = contact.name,
+                            imageUri = contact.profilePicUri,
+                            initial = contact.avatarInitial,
+                            colorHex = contact.avatarColorHex,
+                            subtitle = contact.phone
+                        )
+                    },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = BharatNavyLight),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("zoom_full_dp_button")
+                ) {
+                    Icon(Icons.Default.ZoomIn, null, tint = BharatElectricCyan, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Zoom Profile Picture (DP)", fontWeight = FontWeight.Bold, color = BharatWhite, fontSize = 13.sp)
                 }
             }
         }

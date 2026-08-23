@@ -16,7 +16,7 @@ import com.example.data.model.*
         ChannelEntity::class,
         ContactEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

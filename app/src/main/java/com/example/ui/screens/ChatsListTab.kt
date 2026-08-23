@@ -194,7 +194,8 @@ fun ChatsListTab(
                 items(chats, key = { it.id }) { chat ->
                     ChatItemRow(
                         chat = chat,
-                        onClick = { viewModel.openChat(chat.id) }
+                        onClick = { viewModel.openChat(chat.id) },
+                        onAvatarClick = { viewModel.openContactProfileFromChat(chat) }
                     )
                 }
             }
@@ -205,7 +206,8 @@ fun ChatsListTab(
 @Composable
 fun ChatItemRow(
     chat: ChatEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onAvatarClick: () -> Unit = onClick
 ) {
     val bColors = LocalBharatColors.current
 
@@ -223,7 +225,7 @@ fun ChatItemRow(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar with Status Ring
+            // Avatar with Status Ring (tap avatar opens contact profile & zoomable DP)
             StatusRingAvatar(
                 initial = chat.avatarInitial,
                 avatarColorHex = chat.avatarColorHex,
@@ -232,7 +234,7 @@ fun ChatItemRow(
                 isStoryViewed = false,
                 isOnline = chat.isOnline,
                 isAiBot = chat.isAiAssistant,
-                onClick = onClick
+                onClick = onAvatarClick
             )
 
             Spacer(modifier = Modifier.width(12.dp))

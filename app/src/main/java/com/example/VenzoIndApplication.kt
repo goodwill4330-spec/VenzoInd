@@ -7,6 +7,17 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 
 class VenzoIndApplication : Application(), ImageLoaderFactory {
+
+    override fun onCreate() {
+        super.onCreate()
+        // Initialize Firestore instance for persistent real-time chat data storage
+        try {
+            com.example.data.sync.FirestoreManager.getInstance(this)
+        } catch (e: Exception) {
+            android.util.Log.e("VenzoIndApp", "Firestore init: ${e.message}")
+        }
+    }
+
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .memoryCache {

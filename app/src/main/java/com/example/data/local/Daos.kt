@@ -48,6 +48,12 @@ interface MessageDao {
     @Query("SELECT * FROM messages ORDER BY timestamp ASC")
     suspend fun getAllMessagesList(): List<MessageEntity>
 
+    @Query("SELECT * FROM messages WHERE id = :msgId")
+    suspend fun getMessageById(msgId: String): MessageEntity?
+
+    @Query("UPDATE messages SET pollVotesJson = :votesJson WHERE id = :msgId")
+    suspend fun updatePollVotes(msgId: String, votesJson: String)
+
     @Query("SELECT * FROM messages WHERE chatId = :chatId ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLatestMessage(chatId: String): MessageEntity?
 
@@ -84,8 +90,14 @@ interface MessageDao {
     @Query("UPDATE messages SET status = :status WHERE chatId = :chatId AND isFromMe = 1")
     suspend fun updateOutgoingMessagesStatus(chatId: String, status: String)
 
+    @Query("UPDATE messages SET isStarred = CASE WHEN isStarred = 1 THEN 0 ELSE 1 END WHERE id = :msgId")
+    suspend fun toggleStarMessage(msgId: String)
+
     @Query("DELETE FROM messages WHERE id = :msgId")
     suspend fun deleteMessage(msgId: String)
+
+    @Query("DELETE FROM messages WHERE id IN (:msgIds)")
+    suspend fun deleteMultipleMessages(msgIds: List<String>)
 
     @Query("DELETE FROM messages WHERE chatId = :chatId")
     suspend fun clearChatMessages(chatId: String)

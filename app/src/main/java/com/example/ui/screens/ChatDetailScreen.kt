@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -24,11 +26,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.data.model.ChatEntity
 import com.example.data.model.MessageEntity
 import com.example.data.model.MessageType
@@ -67,12 +72,109 @@ fun ChatDetailScreen(
     val showBiometricDialog by viewModel.showBiometricAuthDialog.collectAsState()
     val biometricPurpose by viewModel.biometricAuthPurpose.collectAsState()
 
+    val showScheduleMessage by viewModel.showScheduleMessageDialog.collectAsState()
+    val showLocationShare by viewModel.showLocationShareSheet.collectAsState()
+    val showCloudDocPicker by viewModel.showCloudDocPickerSheet.collectAsState()
+    val showForwardDialog by viewModel.showForwardDialog.collectAsState()
+    val forwardMessagesList by viewModel.forwardSelectedMessages.collectAsState()
+    val showContactProfile by viewModel.showContactProfileDialog.collectAsState()
+    val activeContactProfile by viewModel.activeContactProfile.collectAsState()
+    val showZoomableDp by viewModel.showZoomableDpDialog.collectAsState()
+    val activeZoomableDp by viewModel.activeZoomableDp.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val clipboardManager = LocalClipboardManager.current
+    val selectedMessages = remember { mutableStateListOf<MessageEntity>() }
+    val isSelectionMode by remember { derivedStateOf { selectedMessages.isNotEmpty() } }
+
+    var selectedMessageForActions by remember { mutableStateOf<MessageEntity?>(null) }
+    var replyingToMessage by remember { mutableStateOf<MessageEntity?>(null) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            viewModel.sendImageMessage(it.toString())
+        }
+    }
+
+    val docPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "Sovereign_Doc.pdf"
+            viewModel.sendAttachment(MessageType.FILE, fileName, "5.4 MB • Encrypted Cloud")
+            android.widget.Toast.makeText(context, "Attached document: $fileName", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.sendAttachment(MessageType.IMAGE, "camera_capture.jpg", "8.2 MB • High Res")
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            try {
+                cameraLauncher.launch(null)
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "Unable to launch camera", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            android.widget.Toast.makeText(context, "Camera permission is required to capture photos", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val safeLaunchCamera = {
+        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.CAMERA
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (hasPermission) {
+            try {
+                cameraLauncher.launch(null)
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "Unable to launch camera", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        }
+    }
+
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.startVoiceRecording()
+        } else {
+            android.widget.Toast.makeText(context, "Microphone permission is required for voice notes", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val safeStartVoiceRecording = {
+        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (hasPermission) {
+            viewModel.startVoiceRecording()
+        } else {
+            audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
     var showMenu by remember { mutableStateOf(false) }
-    var selectedMessageForReaction by remember { mutableStateOf<MessageEntity?>(null) }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -96,193 +198,324 @@ fun ChatDetailScreen(
                 tonalElevation = 6.dp,
                 border = androidx.compose.foundation.BorderStroke(0.5.dp, bColors.glassBorder)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = { viewModel.closeChat() },
-                        modifier = Modifier.testTag("chat_back_button")
+                if (isSelectionMode) {
+                    // Multi-Select Action Bar (Copy, Forward, Tag/Star, Delete, Select All)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = bColors.textPrimary
-                        )
-                    }
-
-                    // Avatar with optional typing halo
-                    Box(contentAlignment = Alignment.Center) {
-                        if (isOtherUserTyping) {
-                            val infiniteTransition = rememberInfiniteTransition(label = "avatar_typing_halo")
-                            val haloAlpha by infiniteTransition.animateFloat(
-                                initialValue = 0.3f,
-                                targetValue = 0.85f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(700, easing = FastOutSlowInEasing),
-                                    repeatMode = RepeatMode.Reverse
-                                ),
-                                label = "halo_alpha"
-                            )
-                            val haloColor = if (chat.isSecret) SecretChatPink else if (chat.isAiAssistant) BharatElectricCyan else BharatGreenLight
-                            Box(
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(CircleShape)
-                                    .border(2.dp, haloColor.copy(alpha = haloAlpha), CircleShape)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { selectedMessages.clear() },
+                                modifier = Modifier.testTag("clear_selection_button")
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Close Selection", tint = bColors.textPrimary)
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${selectedMessages.size} selected",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = BharatElectricCyan
                             )
                         }
 
-                        StatusRingAvatar(
-                            initial = chat.avatarInitial,
-                            avatarColorHex = chat.avatarColorHex,
-                            size = 40.dp,
-                            isOnline = chat.isOnline,
-                            isAiBot = chat.isAiAssistant
-                        )
-                    }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Tag / Star Action
+                            IconButton(
+                                onClick = {
+                                    selectedMessages.forEach { msg ->
+                                        viewModel.toggleStarMessage(msg.id)
+                                    }
+                                    android.widget.Toast.makeText(context, "Starred / Tagged selected ⭐", android.widget.Toast.LENGTH_SHORT).show()
+                                    selectedMessages.clear()
+                                },
+                                modifier = Modifier.testTag("star_selected_messages_button")
+                            ) {
+                                Icon(Icons.Default.Star, contentDescription = "Tag/Star", tint = GoldAccent)
+                            }
 
-                    Spacer(modifier = Modifier.width(10.dp))
+                            // Copy to Clipboard Action
+                            IconButton(
+                                onClick = {
+                                    val textToCopy = selectedMessages.joinToString("\n") { it.text }
+                                    clipboardManager.setText(AnnotatedString(textToCopy))
+                                    android.widget.Toast.makeText(context, "Copied ${selectedMessages.size} message(s)", android.widget.Toast.LENGTH_SHORT).show()
+                                    selectedMessages.clear()
+                                },
+                                modifier = Modifier.testTag("copy_selected_messages_button")
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = BharatElectricCyan)
+                            }
 
-                    // Contact Info
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { viewModel.showSecretChatInfo.value = true }
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = chat.title,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = if (chat.isSecret) SecretChatPink else bColors.textPrimary,
-                                maxLines = 1
-                            )
-                            if (chat.isVerifiedBusiness) {
-                                VerifiedBadge(isBusiness = true)
-                            } else if (chat.isAiAssistant) {
-                                VerifiedBadge(isBusiness = false)
+                            // Forward Action
+                            IconButton(
+                                onClick = {
+                                    viewModel.forwardSelectedMessages.value = selectedMessages.toList()
+                                    viewModel.showForwardDialog.value = true
+                                    selectedMessages.clear()
+                                },
+                                modifier = Modifier.testTag("forward_selected_messages_button")
+                            ) {
+                                Icon(Icons.Default.Forward, contentDescription = "Forward", tint = BharatGreenLight)
+                            }
+
+                            // Delete Action
+                            IconButton(
+                                onClick = {
+                                    val count = selectedMessages.size
+                                    viewModel.deleteMessages(selectedMessages.map { it.id })
+                                    android.widget.Toast.makeText(context, "Deleted $count message(s)", android.widget.Toast.LENGTH_SHORT).show()
+                                    selectedMessages.clear()
+                                },
+                                modifier = Modifier.testTag("delete_selected_messages_button")
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = RoseError)
+                            }
+
+                            // Select All Action
+                            IconButton(
+                                onClick = {
+                                    if (selectedMessages.size == messages.size) {
+                                        selectedMessages.clear()
+                                    } else {
+                                        selectedMessages.clear()
+                                        selectedMessages.addAll(messages)
+                                    }
+                                },
+                                modifier = Modifier.testTag("select_all_messages_button")
+                            ) {
+                                Icon(Icons.Default.SelectAll, contentDescription = "Select All", tint = bColors.textSecondary)
                             }
                         }
+                    }
+                } else {
+                    // Standard Top Bar
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { viewModel.closeChat() },
+                            modifier = Modifier.testTag("chat_back_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = bColors.textPrimary
+                            )
+                        }
 
-                        AnimatedContent(
-                            targetState = isOtherUserTyping,
-                            transitionSpec = {
-                                fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(180))
-                            },
-                            label = "typing_status_anim"
-                        ) { typingActive ->
-                            if (typingActive) {
-                                val indicatorColor = if (chat.isSecret) SecretChatPink else if (chat.isAiAssistant) BharatElectricCyan else BharatGreenLight
-                                PulsingTypingIndicator(
-                                    text = if (chat.isGroup && typingUserName.isNotBlank()) "$typingUserName is $typingStatusText" else typingStatusText,
-                                    color = indicatorColor
+                        // Avatar with Zoom Tap trigger & optional typing halo
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .clickable {
+                                    viewModel.openZoomableDp(
+                                        title = chat.title,
+                                        initial = chat.avatarInitial,
+                                        colorHex = chat.avatarColorHex,
+                                        subtitle = chat.subtitle
+                                    )
+                                }
+                                .testTag("chat_header_avatar_zoom")
+                        ) {
+                            if (isOtherUserTyping) {
+                                val infiniteTransition = rememberInfiniteTransition(label = "avatar_typing_halo")
+                                val haloAlpha by infiniteTransition.animateFloat(
+                                    initialValue = 0.3f,
+                                    targetValue = 0.85f,
+                                    animationSpec = infiniteRepeatable(
+                                        animation = tween(700, easing = FastOutSlowInEasing),
+                                        repeatMode = RepeatMode.Reverse
+                                    ),
+                                    label = "halo_alpha"
                                 )
-                            } else {
+                                val haloColor = if (chat.isSecret) SecretChatPink else if (chat.isAiAssistant) BharatElectricCyan else BharatGreenLight
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(CircleShape)
+                                        .border(2.dp, haloColor.copy(alpha = haloAlpha), CircleShape)
+                                )
+                            }
+
+                            StatusRingAvatar(
+                                initial = chat.avatarInitial,
+                                avatarColorHex = chat.avatarColorHex,
+                                size = 40.dp,
+                                isOnline = chat.isOnline,
+                                isAiBot = chat.isAiAssistant
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        // Contact Info
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { viewModel.showSecretChatInfo.value = true }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
                                 Text(
-                                    text = if (chat.isSecret) "🔒 Self-destruct 10s • Quantum Encrypted" else if (chat.isOnline) "Active now" else chat.subtitle,
-                                    fontSize = 11.sp,
-                                    color = if (chat.isSecret) SecretChatPink else if (chat.isOnline) OnlineGreen else bColors.textMuted,
+                                    text = chat.title,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = if (chat.isSecret) SecretChatPink else bColors.textPrimary,
                                     maxLines = 1
                                 )
+                                if (chat.isVerifiedBusiness) {
+                                    VerifiedBadge(isBusiness = true)
+                                } else if (chat.isAiAssistant) {
+                                    VerifiedBadge(isBusiness = false)
+                                }
+                            }
+
+                            AnimatedContent(
+                                targetState = isOtherUserTyping,
+                                transitionSpec = {
+                                    fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(180))
+                                },
+                                label = "typing_status_anim"
+                            ) { typingActive ->
+                                if (typingActive) {
+                                    val indicatorColor = if (chat.isSecret) SecretChatPink else if (chat.isAiAssistant) BharatElectricCyan else BharatGreenLight
+                                    PulsingTypingIndicator(
+                                        text = if (chat.isGroup && typingUserName.isNotBlank()) "$typingUserName is $typingStatusText" else typingStatusText,
+                                        color = indicatorColor
+                                    )
+                                } else {
+                                    Text(
+                                        text = if (chat.isSecret) "🔒 Self-destruct 10s • Quantum Encrypted" else if (chat.isOnline) "Active now" else chat.subtitle,
+                                        fontSize = 11.sp,
+                                        color = if (chat.isSecret) SecretChatPink else if (chat.isOnline) OnlineGreen else bColors.textMuted,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
-                    }
 
-                    // Call Actions
-                    IconButton(
-                        onClick = { viewModel.startCall(chat.title, chat.avatarInitial, isVideo = false) },
-                        modifier = Modifier.testTag("voice_call_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Phone,
-                            contentDescription = "HD Voice Call",
-                            tint = BharatGreenLight,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = { viewModel.startCall(chat.title, chat.avatarInitial, isVideo = true) },
-                        modifier = Modifier.testTag("video_call_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Videocam,
-                            contentDescription = "4K Video Call",
-                            tint = BharatElectricCyan,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    // More Menu
-                    Box {
-                        IconButton(onClick = { showMenu = true }, modifier = Modifier.testTag("chat_more_options_button")) {
+                        // Call Actions
+                        IconButton(
+                            onClick = { viewModel.startCall(chat.title, chat.avatarInitial, isVideo = false) },
+                            modifier = Modifier.testTag("voice_call_button")
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "More Options",
-                                tint = bColors.textSecondary
+                                imageVector = Icons.Default.Phone,
+                                contentDescription = "HD Voice Call",
+                                tint = BharatGreenLight,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
 
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                            modifier = Modifier.background(if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated)
+                        IconButton(
+                            onClick = { viewModel.startCall(chat.title, chat.avatarInitial, isVideo = true) },
+                            modifier = Modifier.testTag("video_call_button")
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("💬 Test Real-Time Typing", color = BharatGreenLight) },
-                                leadingIcon = { Icon(Icons.Default.Keyboard, null, tint = BharatGreenLight) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.simulateTyping()
-                                }
+                            Icon(
+                                imageVector = Icons.Default.Videocam,
+                                contentDescription = "4K Video Call",
+                                tint = BharatElectricCyan,
+                                modifier = Modifier.size(24.dp)
                             )
-                            DropdownMenuItem(
-                                text = { Text("✨ Summarize with AI", color = BharatSaffronLight) },
-                                leadingIcon = { Icon(Icons.Default.AutoAwesome, null, tint = BharatSaffron) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.summarizeActiveChat()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("🌐 Live Translation", color = bColors.textPrimary) },
-                                leadingIcon = { Icon(Icons.Default.Translate, null, tint = BharatElectricCyan) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.showAiTranslatorDialog.value = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("💳 Send UPI Money", color = bColors.textPrimary) },
-                                leadingIcon = { Icon(Icons.Default.AccountBalanceWallet, null, tint = BharatGreenLight) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.triggerUpiSheetWithBiometrics()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("⏱️ Disappearing Timer", color = bColors.textPrimary) },
-                                leadingIcon = { Icon(Icons.Default.Timer, null, tint = SecretChatPink) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.showDisappearingTimerDialog.value = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("🎨 Chat Wallpaper", color = bColors.textPrimary) },
-                                leadingIcon = { Icon(Icons.Default.Wallpaper, null, tint = bColors.textSecondary) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.showWallpaperSheet.value = true
-                                }
-                            )
+                        }
+
+                        // More Menu
+                        Box {
+                            IconButton(onClick = { showMenu = true }, modifier = Modifier.testTag("chat_more_options_button")) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "More Options",
+                                    tint = bColors.textSecondary
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false },
+                                modifier = Modifier.background(if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated)
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("🖼️ View Full Profile (Zoom DP)", color = BharatElectricCyan) },
+                                    leadingIcon = { Icon(Icons.Default.ZoomIn, null, tint = BharatElectricCyan) },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.openZoomableDp(
+                                            title = chat.title,
+                                            initial = chat.avatarInitial,
+                                            colorHex = chat.avatarColorHex,
+                                            subtitle = chat.subtitle
+                                        )
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("⏱️ Schedule Message", color = BharatSaffron) },
+                                    leadingIcon = { Icon(Icons.Default.Schedule, null, tint = BharatSaffron) },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.showScheduleMessageDialog.value = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("💬 Test Real-Time Typing", color = BharatGreenLight) },
+                                    leadingIcon = { Icon(Icons.Default.Keyboard, null, tint = BharatGreenLight) },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.simulateTyping()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("✨ Summarize with AI", color = BharatSaffronLight) },
+                                    leadingIcon = { Icon(Icons.Default.AutoAwesome, null, tint = BharatSaffron) },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.summarizeActiveChat()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🌐 Live Translation", color = bColors.textPrimary) },
+                                    leadingIcon = { Icon(Icons.Default.Translate, null, tint = BharatElectricCyan) },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.showAiTranslatorDialog.value = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("💳 Send UPI Money", color = bColors.textPrimary) },
+                                    leadingIcon = { Icon(Icons.Default.AccountBalanceWallet, null, tint = BharatGreenLight) },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.triggerUpiSheetWithBiometrics()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🔒 Disappearing Timer", color = bColors.textPrimary) },
+                                    leadingIcon = { Icon(Icons.Default.Timer, null, tint = SecretChatPink) },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.showDisappearingTimerDialog.value = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🎨 Chat Wallpaper", color = bColors.textPrimary) },
+                                    leadingIcon = { Icon(Icons.Default.Wallpaper, null, tint = bColors.textSecondary) },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.showWallpaperSheet.value = true
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -484,121 +717,222 @@ fun ChatDetailScreen(
                         }
                     }
                 } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Attachment Button (+)
-                        IconButton(
-                            onClick = { viewModel.showAttachmentOptions.value = true },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .testTag("attachment_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AddCircleOutline,
-                                contentDescription = "Attach",
-                                tint = BharatSaffron,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-
-                        // UPI Quick Pay icon
-                        IconButton(
-                            onClick = { viewModel.triggerUpiSheetWithBiometrics() },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .testTag("upi_pay_quick_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CurrencyRupee,
-                                contentDescription = "UPI Pay",
-                                tint = BharatGreenLight,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        // Input Field
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 44.dp, max = 100.dp),
-                            shape = RoundedCornerShape(22.dp),
-                            color = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, bColors.glassBorder)
-                        ) {
-                            Row(
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Replying To Message Banner
+                        if (replyingToMessage != null) {
+                            val replyMsg = replyingToMessage!!
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (bColors.isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.5f))
                             ) {
-                                TextField(
-                                    value = inputText,
-                                    onValueChange = { inputText = it },
-                                    placeholder = {
-                                        Text(
-                                            if (chat.isSecret) "🔒 Encrypted secret message..." else "Message in English, हिंदी, தமிழ்...",
-                                            color = bColors.textMuted,
-                                            fontSize = 13.5.sp
-                                        )
-                                    },
-                                    colors = TextFieldDefaults.colors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        focusedTextColor = bColors.textPrimary,
-                                        unfocusedTextColor = bColors.textPrimary
-                                    ),
+                                Row(
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("chat_message_input")
-                                )
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(4.dp)
+                                                .height(34.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(BharatElectricCyan)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = "Replying to ${replyMsg.senderName}",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.5.sp,
+                                                color = BharatElectricCyan
+                                            )
+                                            Text(
+                                                text = if (replyMsg.messageType == MessageType.IMAGE.name) "📷 Photo"
+                                                       else if (replyMsg.messageType == MessageType.UPI_PAYMENT.name) "💳 UPI Transfer ₹${replyMsg.upiAmount?.toInt()}"
+                                                       else replyMsg.text.take(60),
+                                                fontSize = 11.5.sp,
+                                                color = bColors.textSecondary,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = { replyingToMessage = null },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Cancel reply",
+                                            tint = bColors.textSecondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
 
-                        // Mic or Send Button
-                        if (inputText.isBlank()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            // Attachment Button (+)
                             IconButton(
-                                onClick = { viewModel.startVoiceRecording() },
+                                onClick = { viewModel.showAttachmentOptions.value = true },
                                 modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(BharatNavyLight)
-                                    .testTag("voice_record_button")
+                                    .size(38.dp)
+                                    .testTag("attachment_button")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Mic,
-                                    contentDescription = "Record Voice",
-                                    tint = BharatWhite,
+                                    imageVector = Icons.Default.AddCircleOutline,
+                                    contentDescription = "Attach",
+                                    tint = BharatSaffron,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            // Quick Gallery Button
+                            IconButton(
+                                onClick = { galleryLauncher.launch("image/*") },
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .testTag("quick_gallery_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PhotoLibrary,
+                                    contentDescription = "Gallery",
+                                    tint = BharatElectricCyan,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
-                        } else {
+
+                            // Quick Camera Button
                             IconButton(
-                                onClick = {
-                                    val text = inputText
-                                    inputText = ""
-                                    viewModel.sendMessage(text)
-                                },
+                                onClick = { safeLaunchCamera() },
                                 modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(BharatSaffron, BharatSaffronLight)
-                                        )
-                                    )
-                                    .testTag("send_message_button")
+                                    .size(38.dp)
+                                    .testTag("quick_camera_button")
                             ) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Send",
-                                    tint = BharatWhite,
-                                    modifier = Modifier.size(20.dp)
+                                    imageVector = Icons.Default.PhotoCamera,
+                                    contentDescription = "Camera",
+                                    tint = BharatElectricCyan,
+                                    modifier = Modifier.size(22.dp)
                                 )
+                            }
+
+                            // UPI Quick Pay icon
+                            IconButton(
+                                onClick = { viewModel.triggerUpiSheetWithBiometrics() },
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .testTag("upi_pay_quick_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CurrencyRupee,
+                                    contentDescription = "UPI Pay",
+                                    tint = BharatGreenLight,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+
+                            // Input Field
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 44.dp, max = 100.dp),
+                                shape = RoundedCornerShape(22.dp),
+                                color = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, bColors.glassBorder)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextField(
+                                        value = inputText,
+                                        onValueChange = { inputText = it },
+                                        placeholder = {
+                                            Text(
+                                                if (chat.isSecret) "🔒 Encrypted secret..." else "Message in English, हिंदी...",
+                                                color = bColors.textMuted,
+                                                fontSize = 13.sp
+                                            )
+                                        },
+                                        colors = TextFieldDefaults.colors(
+                                            focusedContainerColor = Color.Transparent,
+                                            unfocusedContainerColor = Color.Transparent,
+                                            focusedIndicatorColor = Color.Transparent,
+                                            unfocusedIndicatorColor = Color.Transparent,
+                                            focusedTextColor = bColors.textPrimary,
+                                            unfocusedTextColor = bColors.textPrimary
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("chat_message_input")
+                                    )
+                                }
+                            }
+
+                            // Mic or Send Button
+                            if (inputText.isBlank()) {
+                                IconButton(
+                                    onClick = { safeStartVoiceRecording() },
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(BharatNavyLight)
+                                        .testTag("voice_record_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = "Record Voice",
+                                        tint = BharatWhite,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            } else {
+                                IconButton(
+                                    onClick = {
+                                        val text = inputText
+                                        val repText = replyingToMessage?.text
+                                        val repSender = replyingToMessage?.senderName
+                                        inputText = ""
+                                        replyingToMessage = null
+                                        viewModel.sendMessage(
+                                            text = text,
+                                            replyToText = repText,
+                                            replyToSender = repSender
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            Brush.linearGradient(
+                                                listOf(BharatSaffron, BharatSaffronLight)
+                                            )
+                                        )
+                                        .testTag("send_message_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Send,
+                                        contentDescription = "Send",
+                                        tint = BharatWhite,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -694,55 +1028,100 @@ fun ChatDetailScreen(
 
                 // Messages
                 items(messages, key = { it.id }) { message ->
+                    val isSelected = selectedMessages.any { it.id == message.id }
                     MessageBubble(
                         message = message,
-                        onLongClick = { selectedMessageForReaction = message },
+                        isSelected = isSelected,
+                        onClick = {
+                            if (isSelectionMode) {
+                                if (isSelected) {
+                                    selectedMessages.removeAll { it.id == message.id }
+                                } else {
+                                    selectedMessages.add(message)
+                                }
+                            } else {
+                                selectedMessageForActions = message
+                            }
+                        },
+                        onLongClick = {
+                            if (!isSelectionMode) {
+                                selectedMessages.add(message)
+                            } else {
+                                if (isSelected) {
+                                    selectedMessages.removeAll { it.id == message.id }
+                                } else {
+                                    selectedMessages.add(message)
+                                }
+                            }
+                        },
                         onTranslate = {
                             viewModel.targetTranslateMessageId.value = message.id
                             viewModel.showAiTranslatorDialog.value = true
                         },
                         onPlayTts = {
                             viewModel.ttsManager.speakText(message.translatedText ?: message.text)
+                        },
+                        onVotePoll = { optionIdx ->
+                            viewModel.votePoll(message.id, optionIdx)
                         }
                     )
                 }
             }
-
-            // Quick Emoji Reaction Bar (if message selected)
-            if (selectedMessageForReaction != null) {
-                val targetMsg = selectedMessageForReaction!!
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .clickable { selectedMessageForReaction = null },
-                    contentAlignment = Alignment.Center
-                ) {
-                    GlassCard(
-                        shape = RoundedCornerShape(28.dp),
-                        backgroundColor = DarkSurfaceElevated
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            listOf("🇮🇳", "❤️", "🔥", "🚀", "🤖", "👍", "🙏").forEach { emoji ->
-                                Text(
-                                    text = emoji,
-                                    fontSize = 24.sp,
-                                    modifier = Modifier
-                                        .clickable {
-                                            viewModel.reactToMessage(targetMsg.id, emoji)
-                                            selectedMessageForReaction = null
-                                        }
-                                        .testTag("reaction_emoji_$emoji")
-                                )
-                            }
-                        }
-                    }
-                }
-            }
         }
+    }
+
+    // Context Menu Bottom Sheet on Message Click/Tap
+    if (selectedMessageForActions != null) {
+        val targetMsg = selectedMessageForActions!!
+        MessageActionBottomSheet(
+            message = targetMsg,
+            onDismiss = { selectedMessageForActions = null },
+            onReaction = { emoji ->
+                viewModel.reactToMessage(targetMsg.id, emoji)
+                selectedMessageForActions = null
+            },
+            onReply = {
+                replyingToMessage = targetMsg
+                selectedMessageForActions = null
+            },
+            onCopy = {
+                clipboardManager.setText(AnnotatedString(targetMsg.text))
+                android.widget.Toast.makeText(context, "Message copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                selectedMessageForActions = null
+            },
+            onForward = {
+                viewModel.forwardSelectedMessages.value = listOf(targetMsg)
+                viewModel.showForwardDialog.value = true
+                selectedMessageForActions = null
+            },
+            onStar = {
+                viewModel.toggleStarMessage(targetMsg.id)
+                android.widget.Toast.makeText(
+                    context,
+                    if (targetMsg.isStarred) "Removed star" else "Starred message ⭐",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                selectedMessageForActions = null
+            },
+            onDelete = {
+                viewModel.deleteMessages(listOf(targetMsg.id))
+                android.widget.Toast.makeText(context, "Message deleted 🗑️", android.widget.Toast.LENGTH_SHORT).show()
+                selectedMessageForActions = null
+            },
+            onTranslate = {
+                viewModel.targetTranslateMessageId.value = targetMsg.id
+                viewModel.showAiTranslatorDialog.value = true
+                selectedMessageForActions = null
+            },
+            onPlayTts = {
+                viewModel.ttsManager.speakText(targetMsg.translatedText ?: targetMsg.text)
+                selectedMessageForActions = null
+            },
+            onSelect = {
+                selectedMessages.add(targetMsg)
+                selectedMessageForActions = null
+            }
+        )
     }
 
     if (showUpiPay) {
@@ -769,7 +1148,63 @@ fun ChatDetailScreen(
     if (showAttachments) {
         AttachmentOptionsBottomSheet(
             viewModel = viewModel,
-            onDismiss = { viewModel.showAttachmentOptions.value = false }
+            onDismiss = { viewModel.showAttachmentOptions.value = false },
+            onPickGallery = { galleryLauncher.launch("image/*") },
+            onTakePhoto = { safeLaunchCamera() },
+            onRecordAudio = { safeStartVoiceRecording() },
+            onPickDocument = { docPickerLauncher.launch("*/*") }
+        )
+    }
+
+    if (showLocationShare) {
+        LocationShareBottomSheet(
+            viewModel = viewModel,
+            onDismiss = { viewModel.showLocationShareSheet.value = false }
+        )
+    }
+
+    if (showCloudDocPicker) {
+        CloudDocPickerBottomSheet(
+            viewModel = viewModel,
+            onPickSystemFile = { docPickerLauncher.launch("*/*") },
+            onDismiss = { viewModel.showCloudDocPickerSheet.value = false }
+        )
+    }
+
+    if (showScheduleMessage) {
+        ScheduleMessageDialog(
+            chatId = chat.id,
+            onSchedule = { text, time, label ->
+                viewModel.scheduleMessage(chat.id, text, time, label)
+            },
+            onDismiss = { viewModel.showScheduleMessageDialog.value = false }
+        )
+    }
+
+    if (showForwardDialog) {
+        ForwardMessageDialog(
+            viewModel = viewModel,
+            messages = forwardMessagesList,
+            onDismiss = { viewModel.showForwardDialog.value = false }
+        )
+    }
+
+    if (showContactProfile && activeContactProfile != null) {
+        ContactProfileDialog(
+            viewModel = viewModel,
+            contact = activeContactProfile!!,
+            onDismiss = { viewModel.showContactProfileDialog.value = false }
+        )
+    }
+
+    if (showZoomableDp && activeZoomableDp != null) {
+        com.example.ui.components.ZoomableProfilePicDialog(
+            title = activeZoomableDp!!.title,
+            subtitle = activeZoomableDp!!.subtitle,
+            avatarInitial = activeZoomableDp!!.initial,
+            avatarColorHex = activeZoomableDp!!.colorHex,
+            imageUri = activeZoomableDp!!.imageUri,
+            onDismiss = { viewModel.closeZoomableDp() }
         )
     }
 
@@ -809,15 +1244,255 @@ fun ChatDetailScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MessageActionBottomSheet(
+    message: MessageEntity,
+    onDismiss: () -> Unit,
+    onReaction: (String) -> Unit,
+    onReply: () -> Unit,
+    onCopy: () -> Unit,
+    onForward: () -> Unit,
+    onStar: () -> Unit,
+    onDelete: () -> Unit,
+    onTranslate: () -> Unit,
+    onPlayTts: () -> Unit,
+    onSelect: () -> Unit
+) {
+    val bColors = LocalBharatColors.current
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 10.dp)
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(bColors.textMuted.copy(alpha = 0.4f))
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            // Quick Emoji Reactions
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (bColors.isDark) DarkSurface else LightSurface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, bColors.glassBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf("❤️", "👍", "😂", "😮", "🙏", "🔥", "🚀", "🇮🇳").forEach { emoji ->
+                        Text(
+                            text = emoji,
+                            fontSize = 26.sp,
+                            modifier = Modifier
+                                .clickable { onReaction(emoji) }
+                                .testTag("context_reaction_$emoji")
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Message Preview Card
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (bColors.isDark) DarkSurface.copy(alpha = 0.7f) else LightSurface.copy(alpha = 0.7f),
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, bColors.glassBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(30.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(BharatElectricCyan)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = message.senderName,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp,
+                            color = BharatElectricCyan
+                        )
+                        Text(
+                            text = if (message.messageType == MessageType.IMAGE.name) "📷 Photo attachment"
+                                   else if (message.messageType == MessageType.UPI_PAYMENT.name) "💳 UPI Transfer ₹${message.upiAmount?.toInt()}"
+                                   else message.text,
+                            fontSize = 12.sp,
+                            color = bColors.textPrimary,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Action Items Row 1
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                // Reply Action ("Recent with message")
+                ContextActionButton(
+                    icon = Icons.Default.Reply,
+                    label = "Reply",
+                    tint = BharatElectricCyan,
+                    onClick = onReply,
+                    testTag = "context_reply_button"
+                )
+
+                // Copy Action
+                ContextActionButton(
+                    icon = Icons.Default.ContentCopy,
+                    label = "Copy",
+                    tint = BharatElectricCyan,
+                    onClick = onCopy,
+                    testTag = "context_copy_button"
+                )
+
+                // Forward Action
+                ContextActionButton(
+                    icon = Icons.Default.Forward,
+                    label = "Forward",
+                    tint = BharatGreenLight,
+                    onClick = onForward,
+                    testTag = "context_forward_button"
+                )
+
+                // Tag / Star Action
+                ContextActionButton(
+                    icon = if (message.isStarred) Icons.Default.Star else Icons.Outlined.StarBorder,
+                    label = if (message.isStarred) "Unstar" else "Tag/Star",
+                    tint = GoldAccent,
+                    onClick = onStar,
+                    testTag = "context_star_button"
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Action Items Row 2
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                // Read Aloud Action
+                ContextActionButton(
+                    icon = Icons.Outlined.VolumeUp,
+                    label = "Read Aloud",
+                    tint = BharatSaffronLight,
+                    onClick = onPlayTts,
+                    testTag = "context_tts_button"
+                )
+
+                // Translate Action
+                ContextActionButton(
+                    icon = Icons.Outlined.Translate,
+                    label = "Translate",
+                    tint = BharatElectricCyan,
+                    onClick = onTranslate,
+                    testTag = "context_translate_button"
+                )
+
+                // Multi-select Action
+                ContextActionButton(
+                    icon = Icons.Default.CheckCircleOutline,
+                    label = "Select",
+                    tint = bColors.textPrimary,
+                    onClick = onSelect,
+                    testTag = "context_select_button"
+                )
+
+                // Delete Action
+                ContextActionButton(
+                    icon = Icons.Default.Delete,
+                    label = "Delete",
+                    tint = RoseError,
+                    onClick = onDelete,
+                    testTag = "context_delete_button"
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+fun ContextActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    val bColors = LocalBharatColors.current
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(vertical = 6.dp, horizontal = 10.dp)
+            .testTag(testTag)
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = tint.copy(alpha = 0.15f),
+            modifier = Modifier.size(44.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = tint,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = bColors.textPrimary
+        )
+    }
+}
+
 @Composable
 fun MessageBubble(
     message: MessageEntity,
+    isSelected: Boolean = false,
+    onClick: () -> Unit,
     onLongClick: () -> Unit,
     onTranslate: () -> Unit,
-    onPlayTts: () -> Unit
+    onPlayTts: () -> Unit,
+    onVotePoll: ((Int) -> Unit)? = null
 ) {
     val isMe = message.isFromMe
     val bColors = LocalBharatColors.current
+    val localContext = androidx.compose.ui.platform.LocalContext.current
 
     if (message.messageType == MessageType.SYSTEM_SECURITY.name) {
         Box(
@@ -834,12 +1509,28 @@ fun MessageBubble(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp),
-        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .then(
+                if (isSelected) Modifier.background(BharatElectricCyan.copy(alpha = 0.15f))
+                else Modifier
+            ),
+        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        if (isSelected && !isMe) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = "Selected",
+                tint = BharatElectricCyan,
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .size(20.dp)
+            )
+        }
+
         Column(
             horizontalAlignment = if (isMe) Alignment.End else Alignment.Start,
-            modifier = Modifier.widthIn(max = 300.dp)
+            modifier = Modifier.widthIn(max = 310.dp)
         ) {
             Surface(
                 shape = RoundedCornerShape(
@@ -855,8 +1546,9 @@ fun MessageBubble(
                     if (bColors.isDark) Color(0xFF1E293B) else Color(0xFFFFFFFF)
                 },
                 border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (isMe) {
+                    if (isSelected) 2.dp else 1.dp,
+                    if (isSelected) BharatElectricCyan
+                    else if (isMe) {
                         if (message.isSecretExpiring) SecretChatPink.copy(alpha = 0.5f)
                         else BharatElectricCyan.copy(alpha = 0.35f)
                     } else {
@@ -864,7 +1556,7 @@ fun MessageBubble(
                     }
                 ),
                 modifier = Modifier
-                    .clickable { onLongClick() }
+                    .clickable { onClick() }
                     .testTag("message_bubble_${message.id}")
             ) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -879,8 +1571,78 @@ fun MessageBubble(
                         Spacer(modifier = Modifier.height(2.dp))
                     }
 
+                    // Quoted Reply Box (if replying to another message)
+                    if (message.replyToText != null) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isMe) Color(0x33000000) else bColors.glassBorder.copy(alpha = 0.3f),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, BharatElectricCyan.copy(alpha = 0.4f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(3.dp)
+                                        .height(26.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(BharatElectricCyan)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text(
+                                        text = message.replyToSender ?: "Message",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = BharatElectricCyan
+                                    )
+                                    Text(
+                                        text = message.replyToText,
+                                        fontSize = 11.sp,
+                                        color = if (isMe) BharatWhite.copy(alpha = 0.8f) else bColors.textSecondary,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Image / Photo Bubble
+                    if (message.messageType == MessageType.IMAGE.name) {
+                        Column(modifier = Modifier.padding(bottom = 4.dp)) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.Black.copy(alpha = 0.2f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 220.dp)
+                            ) {
+                                AsyncImage(
+                                    model = message.attachmentUrl ?: "https://picsum.photos/400/300",
+                                    contentDescription = "Photo message",
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                )
+                            }
+                            if (message.text.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = message.text,
+                                    fontSize = 14.sp,
+                                    color = if (isMe) BharatWhite else bColors.textPrimary
+                                )
+                            }
+                        }
+                    }
+
                     // UPI Payment Card Bubble
-                    if (message.messageType == MessageType.UPI_PAYMENT.name) {
+                    else if (message.messageType == MessageType.UPI_PAYMENT.name) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = Color(0x335F259F),
@@ -1001,6 +1763,214 @@ fun MessageBubble(
                         }
                     }
 
+                    // Interactive Poll Message Bubble
+                    else if (message.messageType == MessageType.POLL.name) {
+                        val pollQuestion = message.pollQuestion ?: message.text.removePrefix("📊 Poll: ")
+                        val optionsList = remember(message.pollOptionsJson) {
+                            val list = mutableListOf<String>()
+                            try {
+                                val json = message.pollOptionsJson ?: ""
+                                val regex = "\"text\"\\s*:\\s*\"([^\"]+)\"".toRegex()
+                                regex.findAll(json).forEach { match ->
+                                    list.add(match.groupValues[1])
+                                }
+                            } catch (e: Exception) {}
+                            if (list.isEmpty()) listOf("Option 1", "Option 2") else list
+                        }
+
+                        val votesMap = remember(message.pollVotesJson) {
+                            val map = mutableMapOf<Int, Int>()
+                            try {
+                                val json = message.pollVotesJson ?: "{}"
+                                val cleaned = json.replace("{", "").replace("}", "").trim()
+                                if (cleaned.isNotBlank()) {
+                                    cleaned.split(",").forEach { item ->
+                                        val parts = item.split(":")
+                                        if (parts.size == 2) {
+                                            val key = parts[0].replace("\"", "").trim().toIntOrNull() ?: 0
+                                            val value = parts[1].trim().toIntOrNull() ?: 0
+                                            map[key] = value
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {}
+                            map
+                        }
+
+                        val totalVotes = remember(votesMap) { votesMap.values.sum().coerceAtLeast(1) }
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0x22A855F7),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x66A855F7)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Poll,
+                                        contentDescription = null,
+                                        tint = Color(0xFFA855F7),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Interactive Poll",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFA855F7)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = pollQuestion,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.5.sp,
+                                    color = if (isMe) BharatWhite else bColors.textPrimary
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                optionsList.forEachIndexed { idx, optText ->
+                                    val votes = votesMap[idx] ?: 0
+                                    val pct = ((votes.toFloat() / totalVotes.toFloat()) * 100).toInt()
+
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (bColors.isDark) Color(0x442D124D) else Color(0x22A855F7),
+                                        border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0x55A855F7)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 3.dp)
+                                            .clickable {
+                                                onVotePoll?.invoke(idx)
+                                            }
+                                    ) {
+                                        Box(modifier = Modifier.fillMaxWidth()) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(fraction = (votes.toFloat() / totalVotes.toFloat()).coerceIn(0.05f, 1f))
+                                                    .height(38.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(Color(0x44A855F7))
+                                            )
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = optText,
+                                                    fontWeight = FontWeight.Medium,
+                                                    fontSize = 13.sp,
+                                                    color = if (isMe) BharatWhite else bColors.textPrimary,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Text(
+                                                    text = "$votes ($pct%)",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.5.sp,
+                                                    color = Color(0xFFA855F7)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Tap option to vote • $totalVotes total votes",
+                                    fontSize = 10.sp,
+                                    color = bColors.textSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    // Live Location Bubble
+                    else if (message.messageType == MessageType.LOCATION.name) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0x22F59E0B),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x66F59E0B)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF59E0B),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Live NavIC GPS Location",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFF59E0B)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFF0F1E36),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(90.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Icon(
+                                                imageVector = Icons.Default.Place,
+                                                contentDescription = null,
+                                                tint = Color(0xFFEF4444),
+                                                modifier = Modifier.size(30.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = message.text.substringBefore(" • "),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = BharatWhite,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = message.fileSizeStr ?: "Live GPS Coordinates",
+                                    fontSize = 11.sp,
+                                    color = BharatGreenLight
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        try {
+                                            val geoUri = message.attachmentUrl ?: "geo:28.6139,77.2090"
+                                            val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(geoUri))
+                                            mapIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                            localContext.startActivity(mapIntent)
+                                        } catch (e: Exception) {
+                                            android.widget.Toast.makeText(localContext, "Opening GPS Map...", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF59E0B))
+                                ) {
+                                    Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Open Live Directions", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
                     // Standard Text Message
                     else {
                         Text(
@@ -1048,6 +2018,17 @@ fun MessageBubble(
                         horizontalArrangement = Arrangement.End,
                         modifier = Modifier.align(Alignment.End)
                     ) {
+                        // Starred indicator
+                        if (message.isStarred) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Starred",
+                                tint = GoldAccent,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+
                         // Translation trigger icon
                         Icon(
                             imageVector = Icons.Outlined.Translate,
@@ -1105,6 +2086,17 @@ fun MessageBubble(
                     )
                 }
             }
+        }
+
+        if (isSelected && isMe) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = "Selected",
+                tint = BharatElectricCyan,
+                modifier = Modifier
+                    .padding(start = 6.dp)
+                    .size(20.dp)
+            )
         }
     }
 }

@@ -16,18 +16,22 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// --- Material 3 Dark Color Scheme (Tricolor Inspired) ---
-private val DarkTricolorColorScheme = darkColorScheme(
-    primary = BharatSaffron,
-    onPrimary = BharatWhite,
-    primaryContainer = BharatSaffronDark,
-    onPrimaryContainer = BharatWhite,
-    inversePrimary = BharatSaffronLight,
+// =======================================================================
+// MATERIAL 3 COLOR SCHEMES: CYBER-GREEN & TRICOLOR GLASSMORPHISM
+// =======================================================================
 
-    secondary = BharatGreenLight,
+// --- Dark Mode: Cyber-Green Neon, Saffron Accent & Deep Navy OLED Glass ---
+private val DarkTricolorColorScheme = darkColorScheme(
+    primary = CyberGreenNeon,
+    onPrimary = Color(0xFF022613),
+    primaryContainer = CyberGreenDark,
+    onPrimaryContainer = CyberGreenLight,
+    inversePrimary = CyberGreenPrimary,
+
+    secondary = BharatSaffron,
     onSecondary = BharatWhite,
-    secondaryContainer = BharatGreenDark,
-    onSecondaryContainer = BharatWhite,
+    secondaryContainer = BharatSaffronDark,
+    onSecondaryContainer = BharatSaffronLight,
 
     tertiary = BharatElectricCyan,
     onTertiary = DarkBackground,
@@ -41,64 +45,65 @@ private val DarkTricolorColorScheme = darkColorScheme(
     onSurface = TextPrimaryDark,
     surfaceVariant = DarkSurfaceElevated,
     onSurfaceVariant = TextSecondaryDark,
-    surfaceTint = BharatSaffron,
+    surfaceTint = CyberGreenNeon,
 
     error = RoseError,
     onError = BharatWhite,
-    errorContainer = Color(0x33F43F5E),
-    onErrorContainer = Color(0xFFFECDD3),
+    errorContainer = Color(0x33FF3366),
+    onErrorContainer = Color(0xFFFF8DA9),
 
     outline = DarkBorder,
-    outlineVariant = Color(0x3364748B),
+    outlineVariant = Color(0x2600FF87),
     scrim = Color.Black
 )
 
-// --- Material 3 Light Color Scheme (WhatsApp Style) ---
+// --- Light Mode: Crisp White Frost, Cyber Emerald & Subtle Saffron Accents ---
 private val LightTricolorColorScheme = lightColorScheme(
-    primary = WhatsAppGreen,
+    primary = CyberGreenPrimary,
     onPrimary = BharatWhite,
-    primaryContainer = WhatsAppGreenPill,
-    onPrimaryContainer = WhatsAppGreenDark,
-    inversePrimary = WhatsAppGreenLight,
+    primaryContainer = CyberGreenPill,
+    onPrimaryContainer = CyberGreenDark,
+    inversePrimary = CyberGreenLight,
 
-    secondary = WhatsAppGreenDark,
+    secondary = BharatSaffron,
     onSecondary = BharatWhite,
-    secondaryContainer = WhatsAppActivePill,
-    onSecondaryContainer = WhatsAppGreenDeep,
+    secondaryContainer = Color(0x26FF7A00),
+    onSecondaryContainer = BharatSaffronDark,
 
-    tertiary = WhatsAppGreenDark,
+    tertiary = BharatGreenDark,
     onTertiary = BharatWhite,
-    tertiaryContainer = WhatsAppGreenPill,
-    onTertiaryContainer = WhatsAppGreenDark,
+    tertiaryContainer = Color(0x2610E078),
+    onTertiaryContainer = BharatGreenDark,
 
-    background = Color(0xFFFFFFFF),
-    onBackground = Color(0xFF111B21),
+    background = LightBackground,
+    onBackground = TextPrimaryLight,
 
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF111B21),
-    surfaceVariant = Color(0xFFF0F2F5),
-    onSurfaceVariant = Color(0xFF667781),
-    surfaceTint = WhatsAppGreen,
+    surface = LightSurface,
+    onSurface = TextPrimaryLight,
+    surfaceVariant = LightSurfaceElevated,
+    onSurfaceVariant = TextSecondaryLight,
+    surfaceTint = CyberGreenPrimary,
 
     error = RoseError,
     onError = BharatWhite,
     errorContainer = Color(0xFFFFE4E6),
     onErrorContainer = Color(0xFF9F1239),
 
-    outline = Color(0xFFE9EDEF),
-    outlineVariant = Color(0xFFE9EDEF),
+    outline = LightBorder,
+    outlineVariant = Color(0x1F000000),
     scrim = Color.Black
 )
 
 /**
- * Extended color tokens for custom glassmorphic styling,
- * sovereign gradients, and specialized chat states.
+ * Extended color tokens for specialized glassmorphic overlays,
+ * glowing hairline borders, sovereign tricolor brushes, and cyber elements.
  */
 @Immutable
 data class BharatExtendedColors(
     val saffron: Color,
     val white: Color,
     val green: Color,
+    val cyberNeon: Color,
     val navy: Color,
     val cyan: Color,
     val glassBg: Color,
@@ -109,6 +114,7 @@ data class BharatExtendedColors(
     val textMuted: Color,
     val glassGradient: Brush,
     val tricolorGradient: Brush,
+    val cyberGreenGradient: Brush,
     val isDark: Boolean
 )
 
@@ -117,28 +123,25 @@ val LocalBharatColors = staticCompositionLocalOf {
         saffron = BharatSaffron,
         white = BharatWhite,
         green = BharatGreenLight,
+        cyberNeon = CyberGreenNeon,
         navy = BharatNavy,
         cyan = BharatElectricCyan,
         glassBg = DarkSurfaceGlass,
-        glassBorder = BharatGlassBorderDark,
+        glassBorder = DarkBorder,
         cardBg = DarkCardBg,
         textPrimary = TextPrimaryDark,
         textSecondary = TextSecondaryDark,
         textMuted = TextMutedDark,
-        glassGradient = BharatDarkGlassGradient,
+        glassGradient = CyberGlassDarkGradient,
         tricolorGradient = BharatTricolorBrush,
+        cyberGreenGradient = CyberGreenGradient,
         isDark = true
     )
 }
 
 /**
- * Custom MaterialTheme for Bharat Chat supporting both Light and Dark modes.
- *
- * Primary Color Palette:
- * - Saffron (Kesari): Primary brand, action items, highlights (#FF671F)
- * - White: High-contrast surfaces, readable text, glass frost layers (#FFFFFF)
- * - Green (Emerald): Secondary brand, success, UPI confirmations, online status (#046A38 / #10B981)
- * - Ashoka Navy & Electric Cyan: Tertiary brand, AI badges, encryption indicators (#06038D / #00F0FF)
+ * BharatChatTheme applies both the customized MaterialTheme and
+ * the custom BharatExtendedColors composition local.
  */
 @Composable
 fun BharatChatTheme(
@@ -151,34 +154,38 @@ fun BharatChatTheme(
         BharatExtendedColors(
             saffron = BharatSaffron,
             white = BharatWhite,
-            green = BharatGreenLight,
+            green = CyberGreenPrimary,
+            cyberNeon = CyberGreenNeon,
             navy = BharatNavy,
             cyan = BharatElectricCyan,
             glassBg = DarkSurfaceGlass,
-            glassBorder = BharatGlassBorderDark,
+            glassBorder = DarkBorder,
             cardBg = DarkCardBg,
             textPrimary = TextPrimaryDark,
             textSecondary = TextSecondaryDark,
             textMuted = TextMutedDark,
-            glassGradient = BharatDarkGlassGradient,
+            glassGradient = CyberGlassDarkGradient,
             tricolorGradient = BharatTricolorBrush,
+            cyberGreenGradient = CyberGreenGradient,
             isDark = true
         )
     } else {
         BharatExtendedColors(
-            saffron = WhatsAppGreen,
+            saffron = BharatSaffron,
             white = BharatWhite,
-            green = WhatsAppGreen,
-            navy = WhatsAppGreenDark,
-            cyan = WhatsAppGreenDark,
-            glassBg = Color(0xFFFFFFFF),
-            glassBorder = Color(0xFFE9EDEF),
-            cardBg = Color(0xFFFFFFFF),
-            textPrimary = Color(0xFF111B21),
-            textSecondary = Color(0xFF667781),
-            textMuted = Color(0xFF8696A0),
-            glassGradient = Brush.verticalGradient(listOf(Color(0xFFFFFFFF), Color(0xFFF7F8FA))),
-            tricolorGradient = Brush.horizontalGradient(listOf(WhatsAppGreen, WhatsAppGreenLight, WhatsAppGreenDark)),
+            green = CyberGreenPrimary,
+            cyberNeon = CyberGreenNeon,
+            navy = BharatNavyLight,
+            cyan = BharatElectricCyan,
+            glassBg = LightSurfaceGlass,
+            glassBorder = LightBorder,
+            cardBg = LightCardBg,
+            textPrimary = TextPrimaryLight,
+            textSecondary = TextSecondaryLight,
+            textMuted = TextMutedLight,
+            glassGradient = CyberGlassLightGradient,
+            tricolorGradient = BharatTricolorBrush,
+            cyberGreenGradient = CyberGreenGradient,
             isDark = false
         )
     }
@@ -207,7 +214,7 @@ fun BharatChatTheme(
     }
 }
 
-// Backwards compatibility for templates
+// Backwards compatibility alias
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

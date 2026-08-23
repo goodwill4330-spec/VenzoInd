@@ -34,7 +34,6 @@ jobs:
         run: |
           echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > .env
           echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> .env
-
           cp .env .env.example
           cp .env secrets.properties
           cp .env local.defaults.properties
@@ -45,12 +44,18 @@ jobs:
           cp .env app/secrets.properties
           cp .env app/local.defaults.properties
 
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" >> local.properties
+          echo "sdk.dir=$ANDROID_HOME" > app/local.properties
+          echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" >> app/local.properties
+
           if [ -f "debug.keystore.base64" ]; then
             base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
           fi
           if [ ! -f "debug.keystore" ]; then
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
           fi
+          cp debug.keystore app/debug.keystore 2>/dev/null || true
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -59,16 +64,17 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          ./gradlew --version || gradle wrapper --gradle-version 9.3.1 --distribution-type bin
+          gradle wrapper --gradle-version 9.3.1 --distribution-type bin
           chmod +x gradlew
-          ./gradlew :app:assembleDebug --stacktrace --info --no-daemon
+          ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
           name: VenzoInd-Debug-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
           retention-days: 14
 
 

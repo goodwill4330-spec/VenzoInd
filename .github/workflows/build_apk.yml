@@ -54,24 +54,23 @@ EOF
 GEMINI_API_KEY=
 FIREBASE_APPCHECK_DEBUG_TOKEN=
 EOF
+        mkdir -p app
         if [ ! -f "app/google-services.json" ]; then
-          mkdir -p app
           cat << 'EOF' > app/google-services.json
-        {
-          "project_info": { "project_number": "505106989844", "project_id": "bharatchat-sovereign", "storage_bucket": "bharatchat-sovereign.appspot.com" },
-          "client": [ { "client_info": { "mobilesdk_app_id": "1:505106989844:android:bharatchat", "android_client_info": { "package_name": "com.aistudio.bharatchat.vnrkzp" } }, "oauth_client": [], "api_key": [ { "current_key": "AIzaSyB0haratChatSecureFallbackKey2026" } ], "services": { "appinvite_service": { "other_platform_oauth_client": [] } } } ],
-          "configuration_version": "1"
-        }
-        EOF
+{
+  "project_info": { "project_number": "505106989844", "project_id": "bharatchat-sovereign", "storage_bucket": "bharatchat-sovereign.appspot.com" },
+  "client": [ { "client_info": { "mobilesdk_app_id": "1:505106989844:android:bharatchat", "android_client_info": { "package_name": "com.aistudio.bharatchat.vnrkzp" } }, "oauth_client": [], "api_key": [ { "current_key": "AIzaSyB0haratChatSecureFallbackKey2026" } ], "services": { "appinvite_service": { "other_platform_oauth_client": [] } } } ],
+  "configuration_version": "1"
+}
+EOF
         fi
-        gradle wrapper --gradle-version 8.13 --distribution-type all || true
-        chmod +x ./gradlew || true
         if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
           base64 -d debug.keystore.base64 > debug.keystore || true
         fi
         if [ ! -f "debug.keystore" ]; then
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
         fi
+        chmod +x ./gradlew || true
 
     - name: Build Debug APK
       env:
@@ -79,7 +78,7 @@ EOF
         FIREBASE_APPCHECK_DEBUG_TOKEN: ""
       run: |
         mkdir -p app/build/outputs/apk/debug
-        ./gradlew :app:assembleDebug --stacktrace --no-daemon --no-scan -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
+        gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests || ./gradlew :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4

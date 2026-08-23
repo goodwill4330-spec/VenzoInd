@@ -19,6 +19,10 @@ jobs:
     name: Build VenzoInd APK
     runs-on: ubuntu-latest
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -29,37 +33,49 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          validate-wrappers: false
 
-      - name: Accept Licenses & Install Android SDK Packages
+      - name: Configure Android SDK Licenses & Tools
         run: |
-          set +e
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p "$ANDROID_HOME/licenses"
           echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$ANDROID_HOME/licenses/android-sdk-license"
           echo "d56f5187479451eabf01fb78717b9d04596d004d" >> "$ANDROID_HOME/licenses/android-sdk-license"
           echo "84831b9409646a578e447d4525d71a64ecd30130" >> "$ANDROID_HOME/licenses/android-sdk-license"
           echo "84831b9409646a578e447d4525d71a64ecd30130" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
-          
-          yes | sdkmanager --licenses || true
-          sdkmanager --channel=3 "platforms;android-36" "build-tools;36.0.0" || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
-          set -e
+          echo "791207295465b338e12910e6f73e75e1464e9d9b" > "$ANDROID_HOME/licenses/android-sdk-arm-dbt-license"
+          echo "601085b94c2773b5470201003f85e35465b614ac" > "$ANDROID_HOME/licenses/android-googletv-license"
+          echo "33b6a2b649200215ec526e35f47e30b70f90fb4e" > "$ANDROID_HOME/licenses/google-gdk-license"
+          echo "e9acab5b5fbb560a72cfa4f6fb0b1fcd4970a231" > "$ANDROID_HOME/licenses/intel-android-extra-license"
+          echo "d975f751698a77b662f1254ddbeed3901e976f5a" > "$ANDROID_HOME/licenses/intel-android-sysimage-license"
+          echo "e9acab5b5fbb560a72cfa4f6fb0b1fcd4970a231" > "$ANDROID_HOME/licenses/mips-android-sysimage-license"
 
-      - name: Prepare Secrets, Environment & Configuration
+          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+          fi
+
+      - name: Prepare Secrets, Environment & Google Services
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          
-          printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env
-          printf "GEMINI_API_KEY=\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > .env.example
-          printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > secrets.properties
-          printf "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345\nFIREBASE_APPCHECK_DEBUG_TOKEN=\n" > local.defaults.properties
-          
+
+          cat << 'EOF' > .env
+GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345
+FIREBASE_APPCHECK_DEBUG_TOKEN=
+EOF
+          cp .env .env.example
+          cp .env secrets.properties
+          cp .env local.defaults.properties
+
           mkdir -p app
-          cp .env app/.env 2>/dev/null || true
-          cp .env.example app/.env.example 2>/dev/null || true
-          cp secrets.properties app/secrets.properties 2>/dev/null || true
-          cp local.defaults.properties app/local.defaults.properties 2>/dev/null || true
+          cp .env app/.env
+          cp .env app/.env.example
+          cp .env app/secrets.properties
+          cp .env app/local.defaults.properties
 
           if [ ! -f "app/google-services.json" ]; then
             cat << 'EOF' > app/google-services.json
@@ -102,14 +118,10 @@ EOF
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
           fi
 
-      - name: Set up Gradle 8.13
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
-
       - name: Build Debug APK
         env:
           KEY_PASSWORD: android
+          STORE_PASSWORD: android
         run: |
           gradle :app:assembleDebug --stacktrace --no-daemon -x test -x lint -x check -x verifyRoborazziDebug -x screenshotTests
 

@@ -1,6 +1,9 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
+import android.database.Cursor
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.ai.GeminiAiService
@@ -14,10 +17,12 @@ import com.example.data.sync.MultiDeviceSyncManager
 import com.example.data.sync.SyncPairStatus
 import com.example.utils.AudioAndTtsManager
 import com.example.util.VoiceRecorderManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -141,8 +146,17 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         try {
             val devId = profileDataStore.getDeviceId()
             val firestore = com.example.data.sync.FirestoreManager.getInstance(getApplication())
-            firestore.publishUserProfile(profile)
-            firestore.listenForCloudUsers(database, profile.name)
+            firestore.publishUserProfile(profile, devId)
+            firestore.listenForCloudUsers(database, profile.name, devId)
+
+            // Auto-sync local phonebook contacts with Firestore registered users
+            val contactProvider = com.example.data.contacts.ContactProvider.getInstance(getApplication(), database)
+            if (contactProvider.hasContactPermission()) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    contactProvider.syncAndMapContactsWithFirestore(myDeviceId = devId, myPhone = profile.phone)
+                }
+            }
+
             firestore.startGlobalMessagesListener(
                 appDatabase = database,
                 currentUserId = profile.phone.ifBlank { profile.bharatId },
@@ -338,6 +352,20 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun syncDevicePhonebookContacts(context: Context, onComplete: (summary: com.example.data.contacts.ContactSyncSummary) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val devId = profileDataStore.getDeviceId()
+            val provider = com.example.data.contacts.ContactProvider.getInstance(context, database)
+            val summary = provider.syncAndMapContactsWithFirestore(
+                myDeviceId = devId,
+                myPhone = _userProfile.value.phone
+            )
+            withContext(Dispatchers.Main) {
+                onComplete(summary)
+            }
+        }
+    }
+
     // Active Story Viewer State
     private val _activeStory = MutableStateFlow<StoryEntity?>(null)
     val activeStory: StateFlow<StoryEntity?> = _activeStory.asStateFlow()
@@ -454,8 +482,6 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     init {
         viewModelScope.launch {
             repository.seedInitialDataIfEmpty()
-            delay(1800) // Splash screen delay
-            _currentScreen.value = AppScreen.MAIN_APP
         }
     }
 
@@ -947,12 +973,15 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         try {
             val devId = profileDataStore.getDeviceId()
             val myUid = _userProfile.value.phone.ifBlank { _userProfile.value.bharatId }
+            val activeChat = _activeChatId.value ?: ""
+            val targetDev = if (activeChat.startsWith("chat_dev_")) activeChat.removePrefix("chat_") else ""
             com.example.data.sync.FirestoreManager.getInstance(getApplication()).initiateCloudCall(
                 callId = callId,
                 callerId = myUid,
                 callerName = _userProfile.value.name,
                 callerAvatar = _userProfile.value.avatarInitial,
                 callerDeviceId = devId,
+                targetDeviceId = targetDev,
                 receiverName = safeName,
                 isVideo = isVideo
             ) { status ->

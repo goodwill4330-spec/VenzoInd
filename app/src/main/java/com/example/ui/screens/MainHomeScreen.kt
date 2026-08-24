@@ -175,6 +175,15 @@ fun MainHomeScreen(
                                     },
                                     leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(20.dp)) }
                                 )
+                                DropdownMenuItem(
+                                    text = { Text("Contacts / Phonebook", color = bColors.textPrimary, fontSize = 14.5.sp) },
+                                    onClick = {
+                                        showWhatsAppMenu = false
+                                        viewModel.navigateTo(com.example.ui.viewmodel.AppScreen.CONTACTS_LIST)
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Contacts, contentDescription = null, tint = BharatSaffron, modifier = Modifier.size(20.dp)) },
+                                    modifier = Modifier.testTag("menu_contacts_item")
+                                )
                                 HorizontalDivider(color = bColors.glassBorder.copy(alpha = 0.5f))
                                 DropdownMenuItem(
                                     text = { Text("Settings", color = bColors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.5.sp) },

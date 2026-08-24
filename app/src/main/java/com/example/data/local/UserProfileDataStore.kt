@@ -62,17 +62,19 @@ class UserProfileDataStore(private val context: Context) {
             }
         }
         .map { preferences ->
+            val devId = getDeviceId()
+            val suffix = devId.takeLast(4).uppercase()
             UserProfile(
-                name = preferences[PreferenceKeys.DISPLAY_NAME] ?: "VenzoInd User",
+                name = preferences[PreferenceKeys.DISPLAY_NAME] ?: "Venzo User $suffix",
                 statusBio = preferences[PreferenceKeys.STATUS_BIO] ?: "Hey there! I am using VenzoInd.",
-                avatarInitial = preferences[PreferenceKeys.AVATAR_INITIAL] ?: "VU",
+                avatarInitial = preferences[PreferenceKeys.AVATAR_INITIAL] ?: suffix.take(2),
                 avatarColorHex = preferences[PreferenceKeys.AVATAR_COLOR_HEX] ?: "#10B981",
                 customAvatarIndex = preferences[PreferenceKeys.CUSTOM_AVATAR_INDEX] ?: 0,
                 profilePicUri = preferences[PreferenceKeys.PROFILE_PIC_URI] ?: "",
-                bharatId = preferences[PreferenceKeys.BHARAT_ID] ?: "@venzoind_user",
-                phone = preferences[PreferenceKeys.PHONE] ?: "+91 98765 43210",
-                email = preferences[PreferenceKeys.EMAIL] ?: "user@venzoind.com",
-                upiVpa = preferences[PreferenceKeys.UPI_VPA] ?: "venzoind@upi",
+                bharatId = preferences[PreferenceKeys.BHARAT_ID] ?: "@venzo_$suffix".lowercase(),
+                phone = preferences[PreferenceKeys.PHONE] ?: "+91 98$suffix 43210",
+                email = preferences[PreferenceKeys.EMAIL] ?: "user_$suffix@venzoind.com",
+                upiVpa = preferences[PreferenceKeys.UPI_VPA] ?: "venzo_$suffix@upi".lowercase(),
                 walletBalance = preferences[PreferenceKeys.WALLET_BALANCE] ?: 14850.50
             )
         }

@@ -36,6 +36,9 @@ interface ChatDao {
     @Query("UPDATE chats SET unreadCount = 0 WHERE id = :chatId")
     suspend fun markChatAsRead(chatId: String)
 
+    @Query("UPDATE chats SET title = :title WHERE id = :chatId")
+    suspend fun updateChatTitle(chatId: String, title: String)
+
     @Query("UPDATE chats SET isPinned = CASE WHEN isPinned = 1 THEN 0 ELSE 1 END WHERE id = :chatId")
     suspend fun toggleChatPin(chatId: String)
 

@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -29,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import android.widget.Toast
 import com.example.data.model.ContactEntity
 import com.example.ui.components.GlassCard
 import com.example.ui.components.QuantumShieldBadge
@@ -55,6 +59,27 @@ fun ContactsListScreen(
     val contacts by viewModel.filteredAndSortedContacts.collectAsState()
     val allContacts by viewModel.contacts.collectAsState()
     val showBackupRestore by viewModel.showBackupRestoreDialog.collectAsState()
+
+    val context = LocalContext.current
+    var isSyncingPhonebook by remember { mutableStateOf(false) }
+
+    val contactsPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            isSyncingPhonebook = true
+            viewModel.syncDevicePhonebookContacts(context) { summary ->
+                isSyncingPhonebook = false
+                Toast.makeText(
+                    context,
+                    "Synced ${summary.totalDeviceContacts} contacts (${summary.matchedCount} on VenzoInd)",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        } else {
+            Toast.makeText(context, "Permission to read contacts was denied", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     var showAddContactDialog by remember { mutableStateOf(false) }
 
@@ -108,11 +133,53 @@ fun ContactsListScreen(
                         }
                     }
 
-                    // Top Action Buttons (Backup/Restore & Add Contact)
+                    // Top Action Buttons (Sync from Phonebook, Backup/Restore & Add Contact)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        IconButton(
+                            onClick = {
+                                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.READ_CONTACTS
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    isSyncingPhonebook = true
+                                    viewModel.syncDevicePhonebookContacts(context) { summary ->
+                                        isSyncingPhonebook = false
+                                        Toast.makeText(
+                                            context,
+                                            "Synced ${summary.totalDeviceContacts} contacts (${summary.matchedCount} on VenzoInd)",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                } else {
+                                    contactsPermissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
+                                }
+                            },
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(BharatElectricCyan.copy(alpha = 0.2f))
+                                .testTag("contacts_sync_phonebook_button")
+                        ) {
+                            if (isSyncingPhonebook) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = BharatElectricCyan,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = "Sync Mobile Contacts",
+                                    tint = BharatElectricCyan,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
                         IconButton(
                             onClick = { viewModel.showBackupRestoreDialog.value = true },
                             modifier = Modifier
@@ -234,6 +301,80 @@ fun ContactsListScreen(
                                 contentDescription = "Clear Search",
                                 tint = bColors.textSecondary,
                                 modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Sync Phonebook Contacts Prompt Card (if permission not yet granted)
+            val hasContactPerm = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.READ_CONTACTS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+            if (!hasContactPerm) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = BharatElectricCyan.copy(alpha = 0.12f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.35f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(BharatElectricCyan.copy(alpha = 0.25f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Contacts,
+                                    contentDescription = null,
+                                    tint = BharatElectricCyan,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Sync Device Phonebook",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = bColors.textPrimary
+                                )
+                                Text(
+                                    text = "Match device numbers to display registered names",
+                                    fontSize = 11.sp,
+                                    color = bColors.textSecondary
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { contactsPermissionLauncher.launch(android.Manifest.permission.READ_CONTACTS) },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = BharatElectricCyan),
+                            modifier = Modifier.testTag("grant_contacts_permission_btn")
+                        ) {
+                            Text(
+                                text = "Allow",
+                                color = Color(0xFF0F172A),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
                             )
                         }
                     }

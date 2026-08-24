@@ -187,7 +187,8 @@ class FirestoreManager private constructor(private val context: Context) {
                                 if (isFromMe) continue // Skip own sent messages
 
                                 // Target local chat ID for this sender
-                                val safeChatId = "chat_${senderName.lowercase().trim().replace(" ", "_")}"
+                                val safeChatId = if (senderDeviceId.isNotBlank()) "chat_${senderDeviceId}" else "chat_${senderName.lowercase().trim().replace(" ", "_")}"
+                                val contactId = if (senderDeviceId.isNotBlank()) "contact_${senderDeviceId}" else "contact_${senderName.lowercase().replace(" ", "_")}"
 
                                 // Check if message already exists locally
                                 val existingMsg = appDatabase.messageDao().getMessageById(id)
@@ -222,10 +223,10 @@ class FirestoreManager private constructor(private val context: Context) {
                                     )
 
                                     // Ensure local contact exists
-                                    val existingContact = appDatabase.contactDao().getContactById("contact_${senderName.lowercase().replace(" ", "_")}")
+                                    val existingContact = appDatabase.contactDao().getContactById(contactId)
                                     if (existingContact == null) {
                                         val newContact = ContactEntity(
-                                            id = "contact_${senderName.lowercase().replace(" ", "_")}",
+                                            id = contactId,
                                             name = senderName,
                                             phone = if (senderId != "unknown" && senderId != "me") senderId else "+91 98000 00000",
                                             avatarInitial = senderName.take(2).uppercase(),
@@ -390,6 +391,7 @@ class FirestoreManager private constructor(private val context: Context) {
         callerDeviceId: String = "",
         receiverName: String,
         receiverPhone: String = "",
+        targetDeviceId: String = "",
         isVideo: Boolean,
         onStatusChange: (status: String) -> Unit
     ) {
@@ -402,6 +404,7 @@ class FirestoreManager private constructor(private val context: Context) {
                     "callerId" to callerId,
                     "callerPhone" to callerId,
                     "callerDeviceId" to callerDeviceId,
+                    "targetDeviceId" to targetDeviceId,
                     "callerName" to callerName,
                     "callerAvatar" to callerAvatar,
                     "receiverName" to receiverName,
@@ -452,6 +455,7 @@ class FirestoreManager private constructor(private val context: Context) {
                             val callerPhone = doc.getString("callerPhone") ?: doc.getString("callerId") ?: ""
                             val callerId = doc.getString("callerId") ?: ""
                             val callerDeviceId = doc.getString("callerDeviceId") ?: ""
+                            val targetDeviceId = doc.getString("targetDeviceId") ?: ""
                             val callerAvatar = doc.getString("callerAvatar") ?: callerName.take(2).uppercase()
                             val receiverName = doc.getString("receiverName") ?: ""
                             val receiverPhone = doc.getString("receiverPhone") ?: ""
@@ -473,9 +477,11 @@ class FirestoreManager private constructor(private val context: Context) {
                                     (callerId.isNotBlank() && callerId == currentUserPhone)
                                 }
 
-                                val isTargetedToMe = receiverName.isBlank() ||
+                                val isTargetedToMe = targetDeviceId.isBlank() ||
+                                        (myDeviceId.isNotBlank() && targetDeviceId == myDeviceId) ||
+                                        receiverName.isBlank() ||
                                         receiverName.equals("All", ignoreCase = true) ||
-                                        receiverName.equals("VenzoInd User", ignoreCase = true) ||
+                                        receiverName.contains("Venzo", ignoreCase = true) ||
                                         receiverName.equals(currentUserName, ignoreCase = true) ||
                                         (receiverPhone.isNotBlank() && (receiverPhone == currentUserPhone || receiverPhone.replace("+", "").replace(" ", "") == cleanMyPhone))
 
@@ -512,12 +518,13 @@ class FirestoreManager private constructor(private val context: Context) {
     // Cloud User Discovery & Profile Sync
     // ==========================================
 
-    fun publishUserProfile(profile: UserProfile) {
+    fun publishUserProfile(profile: UserProfile, deviceId: String = "") {
         val db = firestoreInstance ?: return
         scope.launch {
             try {
-                val userId = if (profile.phone.isNotBlank()) profile.phone.replace(" ", "").replace("+", "") else profile.bharatId
+                val userId = if (deviceId.isNotBlank()) deviceId else (if (profile.phone.isNotBlank()) profile.phone.replace(" ", "").replace("+", "") else profile.bharatId)
                 val userData = hashMapOf(
+                    "deviceId" to deviceId,
                     "name" to profile.name,
                     "phone" to profile.phone,
                     "bharatId" to profile.bharatId,
@@ -536,11 +543,12 @@ class FirestoreManager private constructor(private val context: Context) {
         }
     }
 
-    fun listenForCloudUsers(appDatabase: AppDatabase, currentUserName: String) {
+    fun listenForCloudUsers(appDatabase: AppDatabase, currentUserName: String, myDeviceId: String = "") {
         val db = firestoreInstance ?: return
         usersListener?.remove()
 
         try {
+            val contactProvider = com.example.data.contacts.ContactProvider.getInstance(context, appDatabase)
             usersListener = db.collection("users")
                 .addSnapshotListener { snapshots, error ->
                     if (error != null || snapshots == null) return@addSnapshotListener
@@ -548,44 +556,59 @@ class FirestoreManager private constructor(private val context: Context) {
                         val contacts = mutableListOf<ContactEntity>()
                         for (doc in snapshots.documents) {
                             try {
-                                val name = doc.getString("name") ?: ""
-                                if (name.isBlank() || name.equals(currentUserName, ignoreCase = true)) continue
+                                val docDeviceId = doc.getString("deviceId") ?: doc.id
+                                // Skip if this is my own device
+                                if (myDeviceId.isNotBlank() && (docDeviceId == myDeviceId || doc.id == myDeviceId)) continue
 
+                                val cloudName = doc.getString("name") ?: "Venzo User"
                                 val phone = doc.getString("phone") ?: ""
-                                val avatarInitial = doc.getString("avatarInitial") ?: name.take(2).uppercase()
-                                val avatarColorHex = doc.getString("avatarColorHex") ?: "#FF671F"
+
+                                // Try to lookup contact name in local device phonebook if available
+                                val deviceContactName = if (phone.isNotBlank()) {
+                                    contactProvider.getDeviceContactNameForPhone(phone)
+                                } else null
+
+                                val effectiveName = deviceContactName ?: cloudName
+                                val avatarInitial = doc.getString("avatarInitial") ?: effectiveName.take(2).uppercase()
+                                val avatarColorHex = doc.getString("avatarColorHex") ?: "#0284C7"
                                 val statusBio = doc.getString("statusBio") ?: "Available on VenzoInd"
                                 val upiVpa = doc.getString("upiVpa") ?: ""
-                                val id = "contact_${name.lowercase().replace(" ", "_")}"
+                                val targetId = if (docDeviceId.isNotBlank()) docDeviceId else effectiveName.lowercase().replace(" ", "_")
+                                val contactId = "contact_$targetId"
+                                val chatId = "chat_$targetId"
 
                                 val contact = ContactEntity(
-                                    id = id,
-                                    name = name,
-                                    phone = phone,
+                                    id = contactId,
+                                    name = effectiveName,
+                                    phone = if (phone.isNotBlank()) phone else "+91 98000 00000",
                                     upiVpa = upiVpa,
                                     avatarInitial = avatarInitial,
                                     avatarColorHex = avatarColorHex,
                                     statusMsg = statusBio,
-                                    isBharatChatUser = true
+                                    isBharatChatUser = true,
+                                    lastSeenTimestamp = doc.getLong("lastSeen") ?: System.currentTimeMillis()
                                 )
                                 contacts.add(contact)
 
-                                // Also ensure a chat entity exists for this user so chatting is instant
-                                val chatId = "chat_${name.lowercase().replace(" ", "_")}"
+                                // Ensure chat entity exists for this user so chatting is instant
                                 val existingChat = appDatabase.chatDao().getChatById(chatId)
                                 if (existingChat == null) {
                                     val newChat = ChatEntity(
                                         id = chatId,
-                                        title = name,
+                                        title = effectiveName,
                                         subtitle = statusBio,
                                         avatarInitial = avatarInitial,
                                         avatarColorHex = avatarColorHex,
                                         isOnline = true,
-                                        lastMessage = "Connected on VenzoInd 🇮🇳",
+                                        lastMessage = "Connected on VenzoInd 🟢",
                                         lastMessageTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()),
                                         timestamp = System.currentTimeMillis()
                                     )
                                     appDatabase.chatDao().insertChat(newChat)
+                                } else {
+                                    if (existingChat.title != effectiveName) {
+                                        appDatabase.chatDao().updateChatTitle(chatId, effectiveName)
+                                    }
                                 }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error parsing user: ${e.message}")

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "633955932319",
+    "project_id": "venzo-chat-app-3d83c",
+    "storage_bucket": "venzo-chat-app-3d83c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:633955932319:android:02fd93622a60d0a1faeaaa",
+        "android_client_info": {
+          "package_name": "com.aistudio.bharatchat.vnrkzp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEnVnR1Ef_oUvuy0x3Qbr0cXbHBk7-9Ms"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

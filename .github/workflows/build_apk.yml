@@ -58,68 +58,8 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > app/local.properties
           echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" >> app/local.properties
 
-          # Ensure app/google-services.json is always present
           if [ ! -f "app/google-services.json" ]; then
-            cat << 'EOF' > app/google-services.json
-{
-  "project_info": {
-    "project_number": "505106989844",
-    "project_id": "bharatchat-sovereign",
-    "storage_bucket": "bharatchat-sovereign.appspot.com"
-  },
-  "client": [
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:505106989844:android:bharatchat",
-        "android_client_info": {
-          "package_name": "com.aistudio.bharatchat.vnrkzp"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "505106989844-mockclientid.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyB0haratChatSecureFallbackKey2026"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:505106989844:android:bharatchat2",
-        "android_client_info": {
-          "package_name": "com.example"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "505106989844-mockclientid2.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyB0haratChatSecureFallbackKey2026"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    }
-  ],
-  "configuration_version": "1"
-}
-EOF
+            echo "ewogICJwcm9qZWN0X2luZm8iOiB7CiAgICAicHJvamVjdF9udW1iZXIiOiAiNTA1MTA2OTg5ODQ0IiwKICAgICJwcm9qZWN0X2lkIjogImJoYXJhdGNoYXQtc292ZXJlaWduIiwKICAgICJzdG9yYWdlX2J1Y2tldCI6ICJiaGFyYXRjaGF0LXNvdmVyZWlnbi5hcHBzcG90LmNvbSIKICB9LAogICJjbGllbnQiOiBbCiAgICB7CiAgICAgICJjbGllbnRfaW5mbyI6IHsKICAgICAgICAibW9iaWxlc2RrX2FwcF9pZCI6ICIxOjUwNTEwNjk4OTg0NDphbmRyb2lkOmJoYXJhdGNoYXQiLAogICAgICAgICJhbmRyb2lkX2NsaWVudF9pbmZvIjogewogICAgICAgICAgInBhY2thZ2VfbmFtZSI6ICJjb20uYWlzdHVkaW8uYmhhcmF0Y2hhdC52bnJrenAiCiAgICAgICAgfQogICAgICB9LAogICAgICAib2F1dGhfY2xpZW50IjogWwogICAgICAgIHsKICAgICAgICAgICJjbGllbnRfaWQiOiAiNTA1MTA2OTg5ODQ0LW1vY2tjbGllbnRpZC5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsCiAgICAgICAgICAiY2xpZW50X3R5cGUiOiAzCiAgICAgICAgfQogICAgICBdLAogICAgICAiYXBpX2tleSI6IFsKICAgICAgICB7CiAgICAgICAgICAiY3VycmVudF9rZXkiOiAiQUl6YVN5QjBoYXJhdENoYXRTZWN1cmVGYWxsYmFja0tleTIwMjYiCiAgICAgICAgfQogICAgICBdLAogICAgICAic2VydmljZXMiOiB7CiAgICAgICAgImFwcGludml0ZV9zZXJ2aWNlIjogewogICAgICAgICAgIm90aGVyX3BsYXRmb3JtX29hdXRoX2NsaWVudCI6IFtdCiAgICAgICAgfQogICAgICB9CiAgICB9LAogICAgewogICAgICAiY2xpZW50X2luZm8iOiB7CiAgICAgICAgIm1vYmlsZXNka19hcHBfaWQiOiAiMTo1MDUxMDY5ODk4NDQ6YW5kcm9pZDpiaGFyYXRjaGF0MiIsCiAgICAgICAgImFuZHJvaWRfY2xpZW50X2luZm8iOiB7CiAgICAgICAgICAicGFja2FnZV9uYW1lIjogImNvbS5leGFtcGxlIgogICAgICAgIH0KICAgICAgfSwKICAgICAgIm9hdXRoX2NsaWVudCI6IFsKICAgICAgICB7CiAgICAgICAgICAiY2xpZW50X2lkIjogIjUwNTEwNjk4OTg0NC1tb2NrY2xpZW50aWQyLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwKICAgICAgICAgICJjbGllbnRfdHlwZSI6IDMKICAgICAgICB9CiAgICAgIF0sCiAgICAgICJhcGlfa2V5IjogWwogICAgICAgIHsKICAgICAgICAgICJjdXJyZW50X2tleSI6ICJBSXphU3lCMGhhcmF0Q2hhdFNlY3VyZUZhbGxiYWNrS2V5MjAyNiIKICAgICAgICB9CiAgICAgIF0sCiAgICAgICJzZXJ2aWNlcyI6IHsKICAgICAgICAiYXBwaW52aXRlX3NlcnZpY2UiOiB7CiAgICAgICAgICAib3RoZXJfcGxhdGZvcm1fb2F1dGhfY2xpZW50IjogW10KICAgICAgICB9CiAgICAgIH0KICAgIH0KICBdLAogICJjb25maWd1cmF0aW9uX3ZlcnNpb24iOiAiMSIKfQo=" | base64 -d > app/google-services.json
           fi
 
       - name: Build Debug APK
@@ -134,4 +74,3 @@ EOF
           path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 14
-

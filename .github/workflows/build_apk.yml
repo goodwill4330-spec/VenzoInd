@@ -6,9 +6,6 @@ on:
     branches:
       - main
 
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: 'true'
-
 jobs:
   build:
     name: Build Debug APK
@@ -54,16 +51,11 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > app/local.properties
           echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" >> app/local.properties
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.3.1'
-
       - name: Build Debug APK
         run: |
           gradle wrapper --gradle-version 9.3.1 --distribution-type bin
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace --no-daemon
+          ./gradlew :app:assembleDebug --stacktrace --info --no-daemon
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -73,8 +65,3 @@ jobs:
           path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 14
-
-
-
-
-

@@ -21,19 +21,26 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      - name: Setup Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Licenses & Install Android 36 SDK
+      - name: Accept Licenses & Prepare SDK
         run: |
           mkdir -p "$ANDROID_HOME/licenses" || true
           echo -e "24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e" > "$ANDROID_HOME/licenses/android-sdk-license"
           echo -e "84831b9409646a918e30573bab4c9c91346d8abd\n504667f4c0de7af1a06de9f4b1727b84351f2910" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
           yes | sdkmanager --licenses || true
-          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platform-tools" || true
 
-      - name: Prepare Secrets & Properties
+      - name: Prepare Secrets, Keystore & Properties
         run: |
+          if [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore || true
+          fi
           echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" > .env
           echo "FIREBASE_APPCHECK_DEBUG_TOKEN=" >> .env
           cp .env .env.example
@@ -53,9 +60,7 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          gradle wrapper --gradle-version 9.3.1 --distribution-type bin
-          chmod +x gradlew
-          ./gradlew :app:assembleDebug -x test -x lint --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g" --stacktrace
+          gradle :app:assembleDebug -x test -x lint --no-daemon
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -65,3 +70,4 @@ jobs:
           path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 14
+

@@ -64,7 +64,7 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          gradle :app:assembleDebug -x test -x lint --no-daemon
+          gradle :app:assembleDebug -x test -x lint --no-daemon -Djava.awt.headless=true -Dkotlin.compiler.execution.strategy=in-process
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4

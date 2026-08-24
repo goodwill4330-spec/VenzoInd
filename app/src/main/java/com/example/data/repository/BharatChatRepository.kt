@@ -88,6 +88,8 @@ class BharatChatRepository(
     suspend fun sendMessage(
         chatId: String,
         text: String,
+        senderId: String = "me",
+        senderName: String = "You",
         messageType: MessageType = MessageType.TEXT,
         attachmentUrl: String? = null,
         fileSizeStr: String? = null,
@@ -108,8 +110,8 @@ class BharatChatRepository(
         val message = MessageEntity(
             id = msgId,
             chatId = chatId,
-            senderId = "me",
-            senderName = "You",
+            senderId = senderId,
+            senderName = senderName,
             text = text,
             timestamp = now,
             timeFormatted = timeStr,
@@ -139,7 +141,8 @@ class BharatChatRepository(
         // Sync to cloud Firestore in real-time
         context?.let { ctx ->
             try {
-                FirestoreManager.getInstance(ctx).syncMessageToCloud(message)
+                val devId = com.example.data.local.UserProfileDataStore(ctx).getDeviceId()
+                FirestoreManager.getInstance(ctx).syncMessageToCloud(message, senderDeviceId = devId)
             } catch (e: Exception) {
                 // Resilient local persistence
             }
@@ -276,7 +279,16 @@ class BharatChatRepository(
         isSecret: Boolean = false,
         isVerifiedBusiness: Boolean = false
     ): String {
-        val chatId = "chat_${UUID.randomUUID()}"
+        val sanitizedTitle = title.trim().lowercase().replace("[^a-zA-Z0-9]".toRegex(), "_").trim('_')
+        val targetChatId = if (isGroup) "chat_group_${UUID.randomUUID()}" else "chat_$sanitizedTitle"
+
+        // Check if chat already exists
+        val existingChat = chatDao.getChatById(targetChatId)
+        if (existingChat != null) {
+            return existingChat.id
+        }
+
+        val chatId = targetChatId
         val initial = title.firstOrNull()?.uppercase() ?: "B"
         val colors = listOf("#FF671F", "#046A38", "#0284C7", "#7C3AED", "#DB2777")
         val colorHex = colors[Random().nextInt(colors.size)]
@@ -338,6 +350,10 @@ class BharatChatRepository(
         )
         walletDao.insertTransaction(tx)
         return refId
+    }
+
+    suspend fun clearAllContacts() {
+        contactDao.clearAllContacts()
     }
 
     suspend fun seedInitialDataIfEmpty() {

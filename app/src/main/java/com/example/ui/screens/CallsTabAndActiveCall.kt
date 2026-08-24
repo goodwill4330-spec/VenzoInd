@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CallEntity
 import com.example.ui.components.GlassCard
+import com.example.ui.components.LiveCameraVideoPreview
 import com.example.ui.components.QuantumShieldBadge
 import com.example.ui.components.StatusRingAvatar
 import com.example.ui.theme.*
@@ -568,35 +569,13 @@ fun ActiveCallScreen(
                     borderColor = BharatElectricCyan.copy(alpha = 0.6f)
                 ) {
                     Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(BharatNavyLight),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (callState.isFrontCamera) Icons.Default.Face else Icons.Default.Cameraswitch,
-                                    contentDescription = null,
-                                    tint = BharatWhite,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = if (callState.isFrontCamera) "Self (Front)" else "Self (Rear)",
-                                fontSize = 10.sp,
-                                color = BharatElectricCyan,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        // Real hardware camera preview feed
+                        LiveCameraVideoPreview(
+                            isFrontCamera = callState.isFrontCamera,
+                            modifier = Modifier.fillMaxSize()
+                        )
 
                         // Camera flip mini badge button
                         IconButton(
@@ -606,7 +585,7 @@ fun ActiveCallScreen(
                                 .padding(4.dp)
                                 .size(28.dp)
                                 .clip(CircleShape)
-                                .background(Color(0x88000000))
+                                .background(Color(0xAA000000))
                                 .testTag("flip_camera_pip_button")
                         ) {
                             Icon(
@@ -614,6 +593,23 @@ fun ActiveCallScreen(
                                 contentDescription = "Flip Camera",
                                 tint = BharatWhite,
                                 modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        // Camera badge indicator
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(4.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0x99000000)
+                        ) {
+                            Text(
+                                text = if (callState.isFrontCamera) "Front" else "Back",
+                                fontSize = 9.sp,
+                                color = BharatElectricCyan,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                             )
                         }
                     }

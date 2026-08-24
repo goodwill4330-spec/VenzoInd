@@ -131,23 +131,28 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 _userProfile.value = savedProfile.copy(
                     walletBalance = _userProfile.value.walletBalance
                 )
-                try {
-                    com.example.data.sync.FirestoreManager.getInstance(application)
-                        .publishUserProfile(_userProfile.value)
-                } catch (e: Exception) {
-                    // Ignore
-                }
+                bindFirestoreListeners(_userProfile.value)
             }
         }
         refreshAvailableBackups()
+    }
 
-        // Real-time Cloud User Discovery & Incoming Calls via Firestore
+    private fun bindFirestoreListeners(profile: UserProfile) {
         try {
-            val firestore = com.example.data.sync.FirestoreManager.getInstance(application)
-            firestore.listenForCloudUsers(database, _userProfile.value.name)
+            val devId = profileDataStore.getDeviceId()
+            val firestore = com.example.data.sync.FirestoreManager.getInstance(getApplication())
+            firestore.publishUserProfile(profile)
+            firestore.listenForCloudUsers(database, profile.name)
+            firestore.startGlobalMessagesListener(
+                appDatabase = database,
+                currentUserId = profile.phone.ifBlank { profile.bharatId },
+                currentUserName = profile.name,
+                myDeviceId = devId
+            )
             firestore.listenForIncomingCalls(
-                currentUserName = _userProfile.value.name,
-                currentUserPhone = _userProfile.value.phone,
+                currentUserName = profile.name,
+                currentUserPhone = profile.phone.ifBlank { profile.bharatId },
+                myDeviceId = devId,
                 onIncomingCall = { callId, callerName, callerAvatar, isVideo ->
                     currentCallId = callId
                     syncManager.triggerIncomingCall(
@@ -486,11 +491,12 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
 
             // Attach Firestore real-time listener for cloud sync across devices
             try {
+                val currentUid = _userProfile.value.phone.ifBlank { _userProfile.value.bharatId }
                 com.example.data.sync.FirestoreManager.getInstance(getApplication())
                     .attachChatListener(
                         chatId = chatId,
                         appDatabase = database,
-                        currentUserId = _userProfile.value.phone,
+                        currentUserId = currentUid,
                         currentUserName = _userProfile.value.name
                     )
             } catch (e: Exception) {
@@ -544,9 +550,12 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         val chat = _activeChat.value
 
         viewModelScope.launch {
+            val myUid = _userProfile.value.phone.ifBlank { _userProfile.value.bharatId }
             repository.sendMessage(
                 chatId = chatId,
                 text = text,
+                senderId = myUid,
+                senderName = _userProfile.value.name,
                 messageType = MessageType.TEXT,
                 isSecret = chat?.isSecret == true,
                 expireSeconds = chat?.disappearingSeconds ?: 0,
@@ -936,11 +945,14 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
 
         // Send Real-Time Cloud Call Signal to Firestore
         try {
+            val devId = profileDataStore.getDeviceId()
+            val myUid = _userProfile.value.phone.ifBlank { _userProfile.value.bharatId }
             com.example.data.sync.FirestoreManager.getInstance(getApplication()).initiateCloudCall(
                 callId = callId,
-                callerId = _userProfile.value.phone,
+                callerId = myUid,
                 callerName = _userProfile.value.name,
                 callerAvatar = _userProfile.value.avatarInitial,
+                callerDeviceId = devId,
                 receiverName = safeName,
                 isVideo = isVideo
             ) { status ->
@@ -1103,6 +1115,13 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     fun switchDeviceRole(role: DeviceRole) {
         val newProfile = syncManager.switchRole(role)
         _userProfile.value = newProfile
+        bindFirestoreListeners(newProfile)
+    }
+
+    fun clearAllDemoContacts() {
+        viewModelScope.launch {
+            repository.clearAllContacts()
+        }
     }
 
     fun updatePairCode(code: String) {

@@ -48,7 +48,6 @@ fun MainHomeScreen(
     val showBiometricDialog by viewModel.showBiometricAuthDialog.collectAsState()
     val biometricPurpose by viewModel.biometricAuthPurpose.collectAsState()
     val incomingCall by viewModel.incomingCallEvent.collectAsState()
-    val incomingUpi by viewModel.incomingUpiEvent.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
     val showBackupRestore by viewModel.showBackupRestoreDialog.collectAsState()
     val showContactProfile by viewModel.showContactProfileDialog.collectAsState()
@@ -115,30 +114,6 @@ fun MainHomeScreen(
                         }
 
                         IconButton(
-                            onClick = { viewModel.showQrScannerSheet.value = true },
-                            modifier = Modifier.testTag("top_qr_scanner_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.QrCodeScanner,
-                                contentDescription = "Scan QR",
-                                tint = BharatElectricCyan,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        IconButton(
-                            onClick = { viewModel.showUpiPaymentSheet.value = true },
-                            modifier = Modifier.testTag("top_upi_pay_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CurrencyRupee,
-                                contentDescription = "UPI Transfer",
-                                tint = BharatGreenLight,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        IconButton(
                             onClick = { viewModel.toggleTheme() },
                             modifier = Modifier.testTag("top_theme_toggle_button")
                         ) {
@@ -199,14 +174,6 @@ fun MainHomeScreen(
                                         showWhatsAppMenu = false
                                     },
                                     leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(20.dp)) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Payments", color = bColors.textPrimary, fontSize = 14.5.sp) },
-                                    onClick = {
-                                        showWhatsAppMenu = false
-                                        viewModel.showUpiPaymentSheet.value = true
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.CurrencyRupee, contentDescription = null, tint = BharatGreenLight, modifier = Modifier.size(20.dp)) }
                                 )
                                 HorizontalDivider(color = bColors.glassBorder.copy(alpha = 0.5f))
                                 DropdownMenuItem(
@@ -393,13 +360,6 @@ fun MainHomeScreen(
             onAccept = { viewModel.acceptIncomingCall() },
             onDecline = { viewModel.declineIncomingCall() },
             onQuickMessage = { message -> viewModel.declineIncomingCallWithMessage(message) }
-        )
-    }
-
-    incomingUpi?.let { upiEvent ->
-        IncomingUpiDialog(
-            upiEvent = upiEvent,
-            onDismiss = { viewModel.dismissIncomingUpi() }
         )
     }
 }

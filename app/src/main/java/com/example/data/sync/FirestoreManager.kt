@@ -77,7 +77,7 @@ class FirestoreManager private constructor(private val context: Context) {
     /**
      * Persists or syncs a message to Firestore in real-time
      */
-    fun syncMessageToCloud(message: MessageEntity) {
+    fun syncMessageToCloud(message: MessageEntity, senderDeviceId: String = "") {
         val db = firestoreInstance ?: return
         scope.launch {
             try {
@@ -86,6 +86,7 @@ class FirestoreManager private constructor(private val context: Context) {
                     "chatId" to message.chatId,
                     "senderId" to message.senderId,
                     "senderName" to message.senderName,
+                    "senderDeviceId" to senderDeviceId,
                     "text" to message.text,
                     "timestamp" to message.timestamp,
                     "timeFormatted" to message.timeFormatted,
@@ -130,7 +131,8 @@ class FirestoreManager private constructor(private val context: Context) {
                     "timestamp" to message.timestamp,
                     "lastMessageStatus" to message.status,
                     "lastSenderName" to message.senderName,
-                    "lastSenderId" to message.senderId
+                    "lastSenderId" to message.senderId,
+                    "lastSenderDeviceId" to senderDeviceId
                 )
                 db.collection("chats")
                     .document(message.chatId)
@@ -150,6 +152,7 @@ class FirestoreManager private constructor(private val context: Context) {
         appDatabase: AppDatabase,
         currentUserId: String,
         currentUserName: String,
+        myDeviceId: String = "",
         onIncomingMessageReceived: (() -> Unit)? = null
     ) {
         val db = firestoreInstance ?: return
@@ -165,6 +168,7 @@ class FirestoreManager private constructor(private val context: Context) {
                                 val id = doc.getString("id") ?: doc.id
                                 val senderId = doc.getString("senderId") ?: "unknown"
                                 val senderName = doc.getString("senderName") ?: "Contact"
+                                val senderDeviceId = doc.getString("senderDeviceId") ?: ""
                                 val text = doc.getString("text") ?: ""
                                 val timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis()
                                 val timeFormatted = doc.getString("timeFormatted") ?: "Now"
@@ -172,10 +176,13 @@ class FirestoreManager private constructor(private val context: Context) {
                                 val isSeen = doc.getBoolean("isSeen") ?: false
                                 val messageType = doc.getString("messageType") ?: MessageType.TEXT.name
 
-                                // Determine isFromMe
-                                val isFromMe = (senderId == currentUserId ||
-                                        (senderId.isNotBlank() && senderId == currentUserId.replace("+", "").replace(" ", "")) ||
-                                        (senderName.isNotBlank() && senderName.equals(currentUserName, ignoreCase = true)))
+                                // Determine isFromMe safely: if senderDeviceId exists and matches, it's my own message
+                                val isFromMe = if (senderDeviceId.isNotBlank() && myDeviceId.isNotBlank()) {
+                                    senderDeviceId == myDeviceId
+                                } else {
+                                    (senderId == currentUserId && currentUserId.isNotBlank() && currentUserId != "unknown" && currentUserId != "+91 98765 43210") ||
+                                    (senderName.isNotBlank() && currentUserName.isNotBlank() && !currentUserName.equals("VenzoInd User", ignoreCase = true) && senderName.equals(currentUserName, ignoreCase = true))
+                                }
 
                                 if (isFromMe) continue // Skip own sent messages
 
@@ -380,7 +387,9 @@ class FirestoreManager private constructor(private val context: Context) {
         callerId: String,
         callerName: String,
         callerAvatar: String,
+        callerDeviceId: String = "",
         receiverName: String,
+        receiverPhone: String = "",
         isVideo: Boolean,
         onStatusChange: (status: String) -> Unit
     ) {
@@ -391,9 +400,12 @@ class FirestoreManager private constructor(private val context: Context) {
                 val callData = hashMapOf(
                     "callId" to callId,
                     "callerId" to callerId,
+                    "callerPhone" to callerId,
+                    "callerDeviceId" to callerDeviceId,
                     "callerName" to callerName,
                     "callerAvatar" to callerAvatar,
                     "receiverName" to receiverName,
+                    "receiverPhone" to receiverPhone,
                     "isVideo" to isVideo,
                     "status" to "RINGING", // RINGING, ACCEPTED, DECLINED, ENDED
                     "timestamp" to System.currentTimeMillis()
@@ -420,6 +432,7 @@ class FirestoreManager private constructor(private val context: Context) {
     fun listenForIncomingCalls(
         currentUserName: String,
         currentUserPhone: String,
+        myDeviceId: String = "",
         onIncomingCall: (callId: String, callerName: String, callerAvatar: String, isVideo: Boolean) -> Unit,
         onCallStatusChange: (callId: String, status: String) -> Unit
     ) {
@@ -436,9 +449,12 @@ class FirestoreManager private constructor(private val context: Context) {
                         try {
                             val callId = doc.getString("callId") ?: doc.id
                             val callerName = doc.getString("callerName") ?: "Caller"
-                            val callerPhone = doc.getString("callerPhone") ?: ""
+                            val callerPhone = doc.getString("callerPhone") ?: doc.getString("callerId") ?: ""
+                            val callerId = doc.getString("callerId") ?: ""
+                            val callerDeviceId = doc.getString("callerDeviceId") ?: ""
                             val callerAvatar = doc.getString("callerAvatar") ?: callerName.take(2).uppercase()
                             val receiverName = doc.getString("receiverName") ?: ""
+                            val receiverPhone = doc.getString("receiverPhone") ?: ""
                             val status = doc.getString("status") ?: "RINGING"
                             val isVideo = doc.getBoolean("isVideo") ?: false
                             val timestamp = doc.getLong("timestamp") ?: 0L
@@ -447,12 +463,25 @@ class FirestoreManager private constructor(private val context: Context) {
                             val isRecent = Math.abs(now - timestamp) < 180000
 
                             if (isRecent) {
-                                val isMeCaller = (callerPhone.isNotBlank() && callerPhone == currentUserPhone) ||
-                                        callerName.equals(currentUserName, ignoreCase = true)
-
-                                if (!isMeCaller && status == "RINGING") {
-                                    onIncomingCall(callId, callerName, callerAvatar, isVideo)
+                                val cleanMyPhone = currentUserPhone.replace("+", "").replace(" ", "").trim()
+                                val cleanCallerPhone = callerPhone.replace("+", "").replace(" ", "").trim()
+                                
+                                val isMeCaller = if (callerDeviceId.isNotBlank() && myDeviceId.isNotBlank()) {
+                                    callerDeviceId == myDeviceId
                                 } else {
+                                    (cleanCallerPhone.isNotBlank() && cleanMyPhone.isNotBlank() && cleanCallerPhone == cleanMyPhone) ||
+                                    (callerId.isNotBlank() && callerId == currentUserPhone)
+                                }
+
+                                val isTargetedToMe = receiverName.isBlank() ||
+                                        receiverName.equals("All", ignoreCase = true) ||
+                                        receiverName.equals("VenzoInd User", ignoreCase = true) ||
+                                        receiverName.equals(currentUserName, ignoreCase = true) ||
+                                        (receiverPhone.isNotBlank() && (receiverPhone == currentUserPhone || receiverPhone.replace("+", "").replace(" ", "") == cleanMyPhone))
+
+                                if (!isMeCaller && isTargetedToMe && status == "RINGING") {
+                                    onIncomingCall(callId, callerName, callerAvatar, isVideo)
+                                } else if (isMeCaller || status != "RINGING") {
                                     onCallStatusChange(callId, status)
                                 }
                             }

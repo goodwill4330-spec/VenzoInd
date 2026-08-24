@@ -27,6 +27,18 @@ class UserProfileDataStore(private val context: Context) {
         val EMAIL = stringPreferencesKey("user_email")
         val UPI_VPA = stringPreferencesKey("user_upi_vpa")
         val WALLET_BALANCE = doublePreferencesKey("user_wallet_balance")
+        val DEVICE_ID = stringPreferencesKey("user_device_id")
+    }
+
+    private val sharedPrefs = context.getSharedPreferences("app_device_identity", Context.MODE_PRIVATE)
+
+    fun getDeviceId(): String {
+        var id = sharedPrefs.getString("device_uuid", null)
+        if (id.isNullOrBlank()) {
+            id = "dev_" + java.util.UUID.randomUUID().toString().replace("-", "").take(12)
+            sharedPrefs.edit().putString("device_uuid", id).apply()
+        }
+        return id
     }
 
     val isLoggedInFlow: Flow<Boolean> = context.userDataStore.data

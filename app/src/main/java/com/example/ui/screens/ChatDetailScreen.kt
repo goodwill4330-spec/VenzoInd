@@ -495,14 +495,6 @@ fun ChatDetailScreen(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("💳 Send UPI Money", color = bColors.textPrimary) },
-                                    leadingIcon = { Icon(Icons.Default.AccountBalanceWallet, null, tint = BharatGreenLight) },
-                                    onClick = {
-                                        showMenu = false
-                                        viewModel.triggerUpiSheetWithBiometrics()
-                                    }
-                                )
-                                DropdownMenuItem(
                                     text = { Text("🔒 Disappearing Timer", color = bColors.textPrimary) },
                                     leadingIcon = { Icon(Icons.Default.Timer, null, tint = SecretChatPink) },
                                     onClick = {
@@ -546,6 +538,7 @@ fun ChatDetailScreen(
                     .fillMaxWidth()
                     .background(if (bColors.isDark) DarkSurface.copy(alpha = 0.95f) else LightSurface.copy(alpha = 0.95f))
                     .navigationBarsPadding()
+                    .imePadding()
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
                 // AI Smart Replies Row
@@ -845,21 +838,6 @@ fun ChatDetailScreen(
                                     imageVector = Icons.Default.PhotoCamera,
                                     contentDescription = "Camera",
                                     tint = BharatElectricCyan,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-
-                            // UPI Quick Pay icon
-                            IconButton(
-                                onClick = { viewModel.triggerUpiSheetWithBiometrics() },
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .testTag("upi_pay_quick_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CurrencyRupee,
-                                    contentDescription = "UPI Pay",
-                                    tint = BharatGreenLight,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }

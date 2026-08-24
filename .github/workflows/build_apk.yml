@@ -52,12 +52,10 @@ jobs:
           echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" >> app/local.properties
 
       - name: Build Debug APK
-        env:
-          GRADLE_USER_HOME: /home/runner/.gradle
         run: |
           gradle wrapper --gradle-version 9.3.1 --distribution-type bin
           chmod +x gradlew
-          ./gradlew :app:assembleDebug -x test -x lint --stacktrace --no-daemon
+          ./gradlew :app:assembleDebug -x test -x lint --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g" --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4

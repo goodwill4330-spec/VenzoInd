@@ -28,7 +28,9 @@ class FirestoreManager private constructor(private val context: Context) {
     private val TAG = "FirestoreManager"
     private var firestoreInstance: FirebaseFirestore? = null
     private val activeChatListeners = mutableMapOf<String, ListenerRegistration>()
+    private var globalMessagesListener: ListenerRegistration? = null
     private var callsListener: ListenerRegistration? = null
+    private var activeCallDocListener: ListenerRegistration? = null
     private var usersListener: ListenerRegistration? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -108,17 +110,17 @@ class FirestoreManager private constructor(private val context: Context) {
                     "replyToSender" to (message.replyToSender ?: "")
                 )
 
+                // Write to universal messages collection for global cross-device synchronization
+                db.collection("global_messages")
+                    .document(message.id)
+                    .set(messageMap, SetOptions.merge())
+
+                // Write to chat document messages collection
                 db.collection("chats")
                     .document(message.chatId)
                     .collection("messages")
                     .document(message.id)
                     .set(messageMap, SetOptions.merge())
-                    .addOnSuccessListener {
-                        Log.d(TAG, "Message ${message.id} synced to Firestore in real-time.")
-                    }
-                    .addOnFailureListener { e ->
-                        Log.w(TAG, "Firestore message sync error: ${e.message}")
-                    }
 
                 // Also update the chat's last message in cloud
                 val chatSummaryMap = hashMapOf(
@@ -134,6 +136,7 @@ class FirestoreManager private constructor(private val context: Context) {
                     .document(message.chatId)
                     .set(chatSummaryMap, SetOptions.merge())
 
+                Log.d(TAG, "Message ${message.id} synced to Firestore in real-time.")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to upload message to Firestore: ${e.message}")
             }
@@ -141,7 +144,134 @@ class FirestoreManager private constructor(private val context: Context) {
     }
 
     /**
-     * Listens for incoming real-time messages in a chat from Firestore and caches to Room
+     * Listens globally to all real-time incoming messages across devices and caches directly to Room DB
+     */
+    fun startGlobalMessagesListener(
+        appDatabase: AppDatabase,
+        currentUserId: String,
+        currentUserName: String,
+        onIncomingMessageReceived: (() -> Unit)? = null
+    ) {
+        val db = firestoreInstance ?: return
+        globalMessagesListener?.remove()
+
+        try {
+            globalMessagesListener = db.collection("global_messages")
+                .addSnapshotListener { snapshots, error ->
+                    if (error != null || snapshots == null || snapshots.isEmpty) return@addSnapshotListener
+                    scope.launch {
+                        for (doc in snapshots.documents) {
+                            try {
+                                val id = doc.getString("id") ?: doc.id
+                                val senderId = doc.getString("senderId") ?: "unknown"
+                                val senderName = doc.getString("senderName") ?: "Contact"
+                                val text = doc.getString("text") ?: ""
+                                val timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis()
+                                val timeFormatted = doc.getString("timeFormatted") ?: "Now"
+                                val status = doc.getString("status") ?: "DELIVERED"
+                                val isSeen = doc.getBoolean("isSeen") ?: false
+                                val messageType = doc.getString("messageType") ?: MessageType.TEXT.name
+
+                                // Determine isFromMe
+                                val isFromMe = (senderId == currentUserId ||
+                                        (senderId.isNotBlank() && senderId == currentUserId.replace("+", "").replace(" ", "")) ||
+                                        (senderName.isNotBlank() && senderName.equals(currentUserName, ignoreCase = true)))
+
+                                if (isFromMe) continue // Skip own sent messages
+
+                                // Target local chat ID for this sender
+                                val safeChatId = "chat_${senderName.lowercase().trim().replace(" ", "_")}"
+
+                                // Check if message already exists locally
+                                val existingMsg = appDatabase.messageDao().getMessageById(id)
+                                if (existingMsg == null) {
+                                    val entity = MessageEntity(
+                                        id = id,
+                                        chatId = safeChatId,
+                                        senderId = senderId,
+                                        senderName = senderName,
+                                        text = text,
+                                        timestamp = timestamp,
+                                        timeFormatted = timeFormatted,
+                                        isFromMe = false,
+                                        status = status,
+                                        isSeen = isSeen,
+                                        messageType = messageType,
+                                        attachmentUrl = doc.getString("attachmentUrl"),
+                                        fileSizeStr = doc.getString("fileSizeStr"),
+                                        upiAmount = doc.getDouble("upiAmount") ?: 0.0,
+                                        upiTransactionId = doc.getString("upiTransactionId"),
+                                        upiStatus = doc.getString("upiStatus"),
+                                        voiceDurationSec = doc.getLong("voiceDurationSec")?.toInt() ?: 0,
+                                        audioWaveform = doc.getString("audioWaveform"),
+                                        pollQuestion = doc.getString("pollQuestion"),
+                                        pollOptionsJson = doc.getString("pollOptionsJson"),
+                                        pollVotesJson = doc.getString("pollVotesJson"),
+                                        isSecretExpiring = doc.getBoolean("isSecretExpiring") ?: false,
+                                        expireTimeMillis = doc.getLong("expireTimeMillis") ?: 0L,
+                                        isStarred = doc.getBoolean("isStarred") ?: false,
+                                        replyToText = doc.getString("replyToText"),
+                                        replyToSender = doc.getString("replyToSender")
+                                    )
+
+                                    // Ensure local contact exists
+                                    val existingContact = appDatabase.contactDao().getContactById("contact_${senderName.lowercase().replace(" ", "_")}")
+                                    if (existingContact == null) {
+                                        val newContact = ContactEntity(
+                                            id = "contact_${senderName.lowercase().replace(" ", "_")}",
+                                            name = senderName,
+                                            phone = if (senderId != "unknown" && senderId != "me") senderId else "+91 98000 00000",
+                                            avatarInitial = senderName.take(2).uppercase(),
+                                            avatarColorHex = "#FF671F",
+                                            statusMsg = "Available on VenzoInd",
+                                            isBharatChatUser = true
+                                        )
+                                        appDatabase.contactDao().insertContact(newContact)
+                                    }
+
+                                    // Ensure local chat exists
+                                    val existingChat = appDatabase.chatDao().getChatById(safeChatId)
+                                    if (existingChat == null) {
+                                        val newChat = ChatEntity(
+                                            id = safeChatId,
+                                            title = senderName,
+                                            subtitle = "Connected on VenzoInd",
+                                            avatarInitial = senderName.take(2).uppercase(),
+                                            avatarColorHex = "#FF671F",
+                                            isOnline = true,
+                                            lastMessage = text,
+                                            lastMessageTime = timeFormatted,
+                                            timestamp = timestamp,
+                                            unreadCount = 1
+                                        )
+                                        appDatabase.chatDao().insertChat(newChat)
+                                    } else {
+                                        appDatabase.chatDao().updateLastMessageWithStatus(
+                                            chatId = safeChatId,
+                                            lastMsg = text,
+                                            time = timeFormatted,
+                                            timeMillis = timestamp,
+                                            status = "DELIVERED",
+                                            isFromMe = false
+                                        )
+                                    }
+
+                                    appDatabase.messageDao().insertMessage(entity)
+                                    onIncomingMessageReceived?.invoke()
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error saving global incoming message: ${e.message}")
+                            }
+                        }
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "startGlobalMessagesListener error: ${e.message}")
+        }
+    }
+
+    /**
+     * Listens for incoming real-time messages in a specific chat from Firestore and caches to Room
      */
     fun attachChatListener(
         chatId: String,
@@ -157,78 +287,67 @@ class FirestoreManager private constructor(private val context: Context) {
                 .document(chatId)
                 .collection("messages")
                 .addSnapshotListener { snapshots, error ->
-                    if (error != null) {
-                        Log.w(TAG, "Chat listener error for $chatId: ${error.message}")
-                        return@addSnapshotListener
-                    }
+                    if (error != null || snapshots == null || snapshots.isEmpty) return@addSnapshotListener
 
-                    if (snapshots != null && !snapshots.isEmpty) {
-                        scope.launch {
-                            val messagesToInsert = mutableListOf<MessageEntity>()
-                            var latestIncomingMsg: MessageEntity? = null
+                    scope.launch {
+                        val messagesToInsert = mutableListOf<MessageEntity>()
+                        var latestIncomingMsg: MessageEntity? = null
 
-                            for (doc in snapshots.documents) {
-                                try {
-                                    val id = doc.getString("id") ?: doc.id
-                                    val senderId = doc.getString("senderId") ?: "unknown"
-                                    val senderName = doc.getString("senderName") ?: "Contact"
-                                    val text = doc.getString("text") ?: ""
-                                    val timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis()
-                                    val timeFormatted = doc.getString("timeFormatted") ?: "Now"
-                                    val status = doc.getString("status") ?: "DELIVERED"
-                                    val isSeen = doc.getBoolean("isSeen") ?: false
-                                    val messageType = doc.getString("messageType") ?: MessageType.TEXT.name
+                        for (doc in snapshots.documents) {
+                            try {
+                                val id = doc.getString("id") ?: doc.id
+                                val senderId = doc.getString("senderId") ?: "unknown"
+                                val senderName = doc.getString("senderName") ?: "Contact"
+                                val text = doc.getString("text") ?: ""
+                                val timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis()
+                                val timeFormatted = doc.getString("timeFormatted") ?: "Now"
+                                val status = doc.getString("status") ?: "DELIVERED"
+                                val isSeen = doc.getBoolean("isSeen") ?: false
+                                val messageType = doc.getString("messageType") ?: MessageType.TEXT.name
 
-                                    // Determine isFromMe dynamically for this specific phone/user
-                                    val isFromMe = (senderId == currentUserId || 
-                                                    senderId == "me" || 
-                                                    (senderName.isNotBlank() && senderName.equals(currentUserName, ignoreCase = true)))
+                                val isFromMe = (senderId == currentUserId ||
+                                        senderId == "me" ||
+                                        (senderName.isNotBlank() && senderName.equals(currentUserName, ignoreCase = true)))
 
-                                    val entity = MessageEntity(
-                                        id = id,
-                                        chatId = chatId,
-                                        senderId = senderId,
-                                        senderName = senderName,
-                                        text = text,
-                                        timestamp = timestamp,
-                                        timeFormatted = timeFormatted,
-                                        isFromMe = isFromMe,
-                                        status = status,
-                                        isSeen = isSeen,
-                                        messageType = messageType,
-                                        attachmentUrl = doc.getString("attachmentUrl"),
-                                        fileSizeStr = doc.getString("fileSizeStr"),
-                                        upiAmount = doc.getDouble("upiAmount"),
-                                        upiTransactionId = doc.getString("upiTransactionId"),
-                                        upiStatus = doc.getString("upiStatus"),
-                                        voiceDurationSec = doc.getLong("voiceDurationSec")?.toInt(),
-                                        audioWaveform = doc.getString("audioWaveform"),
-                                        pollQuestion = doc.getString("pollQuestion"),
-                                        pollOptionsJson = doc.getString("pollOptionsJson"),
-                                        pollVotesJson = doc.getString("pollVotesJson"),
-                                        isSecretExpiring = doc.getBoolean("isSecretExpiring") ?: false,
-                                        expireTimeMillis = doc.getLong("expireTimeMillis") ?: 0L,
-                                        isStarred = doc.getBoolean("isStarred") ?: false,
-                                        replyToText = doc.getString("replyToText"),
-                                        replyToSender = doc.getString("replyToSender")
-                                    )
-                                    messagesToInsert.add(entity)
-
-                                    if (!isFromMe) {
-                                        if (latestIncomingMsg == null || entity.timestamp > latestIncomingMsg!!.timestamp) {
-                                            latestIncomingMsg = entity
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error parsing Firestore message: ${e.message}")
+                                val entity = MessageEntity(
+                                    id = id,
+                                    chatId = chatId,
+                                    senderId = senderId,
+                                    senderName = senderName,
+                                    text = text,
+                                    timestamp = timestamp,
+                                    timeFormatted = timeFormatted,
+                                    isFromMe = isFromMe,
+                                    status = status,
+                                    isSeen = isSeen,
+                                    messageType = messageType,
+                                    attachmentUrl = doc.getString("attachmentUrl"),
+                                    fileSizeStr = doc.getString("fileSizeStr"),
+                                    upiAmount = doc.getDouble("upiAmount") ?: 0.0,
+                                    upiTransactionId = doc.getString("upiTransactionId"),
+                                    upiStatus = doc.getString("upiStatus"),
+                                    voiceDurationSec = doc.getLong("voiceDurationSec")?.toInt() ?: 0,
+                                    audioWaveform = doc.getString("audioWaveform"),
+                                    pollQuestion = doc.getString("pollQuestion"),
+                                    pollOptionsJson = doc.getString("pollOptionsJson"),
+                                    pollVotesJson = doc.getString("pollVotesJson"),
+                                    isSecretExpiring = doc.getBoolean("isSecretExpiring") ?: false,
+                                    expireTimeMillis = doc.getLong("expireTimeMillis") ?: 0L,
+                                    isStarred = doc.getBoolean("isStarred") ?: false,
+                                    replyToText = doc.getString("replyToText"),
+                                    replyToSender = doc.getString("replyToSender")
+                                )
+                                messagesToInsert.add(entity)
+                                if (!isFromMe) {
+                                    latestIncomingMsg = entity
                                 }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error mapping message: ${e.message}")
                             }
+                        }
 
-                            if (messagesToInsert.isNotEmpty()) {
-                                appDatabase.messageDao().insertMessages(messagesToInsert)
-                            }
-
-                            // Update chat last message in local Room DB
+                        if (messagesToInsert.isNotEmpty()) {
+                            appDatabase.messageDao().insertMessages(messagesToInsert)
                             latestIncomingMsg?.let { incoming ->
                                 appDatabase.chatDao().updateLastMessageWithStatus(
                                     chatId = chatId,
@@ -244,7 +363,7 @@ class FirestoreManager private constructor(private val context: Context) {
                 }
             activeChatListeners[chatId] = listener
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to attach Firestore chat listener: ${e.message}")
+            Log.e(TAG, "attachChatListener error: ${e.message}")
         }
     }
 
@@ -266,6 +385,7 @@ class FirestoreManager private constructor(private val context: Context) {
         onStatusChange: (status: String) -> Unit
     ) {
         val db = firestoreInstance ?: return
+        activeCallDocListener?.remove()
         scope.launch {
             try {
                 val callData = hashMapOf(
@@ -283,8 +403,8 @@ class FirestoreManager private constructor(private val context: Context) {
                     .document(callId)
                     .set(callData)
 
-                // Listen to status of this call (e.g. when other user accepts/declines)
-                db.collection("active_calls")
+                // Listen to status of this call (e.g. when other user accepts/declines/ends)
+                activeCallDocListener = db.collection("active_calls")
                     .document(callId)
                     .addSnapshotListener { snapshot, error ->
                         if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
@@ -316,18 +436,20 @@ class FirestoreManager private constructor(private val context: Context) {
                         try {
                             val callId = doc.getString("callId") ?: doc.id
                             val callerName = doc.getString("callerName") ?: "Caller"
+                            val callerPhone = doc.getString("callerPhone") ?: ""
                             val callerAvatar = doc.getString("callerAvatar") ?: callerName.take(2).uppercase()
                             val receiverName = doc.getString("receiverName") ?: ""
                             val status = doc.getString("status") ?: "RINGING"
                             val isVideo = doc.getBoolean("isVideo") ?: false
                             val timestamp = doc.getLong("timestamp") ?: 0L
 
-                            // Trigger if call is fresh (within last 60 seconds)
-                            val isRecent = (now - timestamp) < 60000
+                            // Trigger if call is fresh (within last 3 minutes)
+                            val isRecent = Math.abs(now - timestamp) < 180000
 
                             if (isRecent) {
-                                // If I am not the caller, and call is RINGING
-                                val isMeCaller = callerName.equals(currentUserName, ignoreCase = true)
+                                val isMeCaller = (callerPhone.isNotBlank() && callerPhone == currentUserPhone) ||
+                                        callerName.equals(currentUserName, ignoreCase = true)
+
                                 if (!isMeCaller && status == "RINGING") {
                                     onIncomingCall(callId, callerName, callerAvatar, isVideo)
                                 } else {
@@ -403,7 +525,7 @@ class FirestoreManager private constructor(private val context: Context) {
                                 val phone = doc.getString("phone") ?: ""
                                 val avatarInitial = doc.getString("avatarInitial") ?: name.take(2).uppercase()
                                 val avatarColorHex = doc.getString("avatarColorHex") ?: "#FF671F"
-                                val statusBio = doc.getString("statusBio") ?: "Available on Bharat Chat"
+                                val statusBio = doc.getString("statusBio") ?: "Available on VenzoInd"
                                 val upiVpa = doc.getString("upiVpa") ?: ""
                                 val id = "contact_${name.lowercase().replace(" ", "_")}"
 
@@ -430,7 +552,7 @@ class FirestoreManager private constructor(private val context: Context) {
                                         avatarInitial = avatarInitial,
                                         avatarColorHex = avatarColorHex,
                                         isOnline = true,
-                                        lastMessage = "Connected on Bharat Chat 🇮🇳",
+                                        lastMessage = "Connected on VenzoInd 🇮🇳",
                                         lastMessageTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()),
                                         timestamp = System.currentTimeMillis()
                                     )

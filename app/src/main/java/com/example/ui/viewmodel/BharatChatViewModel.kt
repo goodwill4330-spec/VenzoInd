@@ -124,6 +124,9 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
 
     init {
         viewModelScope.launch {
+            repository.cleanLegacyDemoData()
+        }
+        viewModelScope.launch {
             profileDataStore.userProfileFlow.collect { savedProfile ->
                 _userProfile.value = savedProfile.copy(
                     walletBalance = _userProfile.value.walletBalance

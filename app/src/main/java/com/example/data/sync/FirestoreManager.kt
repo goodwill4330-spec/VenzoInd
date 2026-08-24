@@ -7,6 +7,7 @@ import com.example.data.model.ChatEntity
 import com.example.data.model.ContactEntity
 import com.example.data.model.MessageEntity
 import com.example.data.model.MessageType
+import com.example.data.model.StoryEntity
 import com.example.data.model.UserProfile
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -32,6 +33,7 @@ class FirestoreManager private constructor(private val context: Context) {
     private var callsListener: ListenerRegistration? = null
     private var activeCallDocListener: ListenerRegistration? = null
     private var usersListener: ListenerRegistration? = null
+    private var storiesListener: ListenerRegistration? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
     private val _isFirestoreConnected = MutableStateFlow(false)
@@ -77,7 +79,12 @@ class FirestoreManager private constructor(private val context: Context) {
     /**
      * Persists or syncs a message to Firestore in real-time
      */
-    fun syncMessageToCloud(message: MessageEntity, senderDeviceId: String = "") {
+    fun syncMessageToCloud(
+        message: MessageEntity,
+        senderDeviceId: String = "",
+        targetDeviceId: String = "",
+        targetPhone: String = ""
+    ) {
         val db = firestoreInstance ?: return
         scope.launch {
             try {
@@ -87,10 +94,11 @@ class FirestoreManager private constructor(private val context: Context) {
                     "senderId" to message.senderId,
                     "senderName" to message.senderName,
                     "senderDeviceId" to senderDeviceId,
+                    "targetDeviceId" to targetDeviceId,
+                    "targetPhone" to targetPhone,
                     "text" to message.text,
                     "timestamp" to message.timestamp,
                     "timeFormatted" to message.timeFormatted,
-                    "isFromMe" to message.isFromMe,
                     "status" to message.status,
                     "isSeen" to message.isSeen,
                     "messageType" to message.messageType,
@@ -146,12 +154,47 @@ class FirestoreManager private constructor(private val context: Context) {
     }
 
     /**
+     * Marks a message as DELIVERED or SEEN in Firestore so the sender sees real double-ticks / blue-ticks
+     */
+    fun updateMessageStatusInCloud(messageId: String, chatId: String, status: String, isSeen: Boolean = false) {
+        val db = firestoreInstance ?: return
+        scope.launch {
+            try {
+                val updateMap = mutableMapOf<String, Any>(
+                    "status" to status,
+                    "isSeen" to isSeen
+                )
+                if (isSeen) {
+                    val seenTime = System.currentTimeMillis()
+                    val seenTimeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(seenTime))
+                    updateMap["seenTimestamp"] = seenTime
+                    updateMap["seenTimeFormatted"] = seenTimeStr
+                }
+                db.collection("global_messages")
+                    .document(messageId)
+                    .set(updateMap, SetOptions.merge())
+
+                if (chatId.isNotBlank()) {
+                    db.collection("chats")
+                        .document(chatId)
+                        .collection("messages")
+                        .document(messageId)
+                        .set(updateMap, SetOptions.merge())
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "updateMessageStatusInCloud error: ${e.message}")
+            }
+        }
+    }
+
+    /**
      * Listens globally to all real-time incoming messages across devices and caches directly to Room DB
      */
     fun startGlobalMessagesListener(
         appDatabase: AppDatabase,
         currentUserId: String,
         currentUserName: String,
+        currentUserPhone: String = "",
         myDeviceId: String = "",
         onIncomingMessageReceived: (() -> Unit)? = null
     ) {
@@ -169,22 +212,60 @@ class FirestoreManager private constructor(private val context: Context) {
                                 val senderId = doc.getString("senderId") ?: "unknown"
                                 val senderName = doc.getString("senderName") ?: "Contact"
                                 val senderDeviceId = doc.getString("senderDeviceId") ?: ""
+                                val targetDeviceId = doc.getString("targetDeviceId") ?: ""
+                                val targetPhone = doc.getString("targetPhone") ?: ""
                                 val text = doc.getString("text") ?: ""
                                 val timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis()
                                 val timeFormatted = doc.getString("timeFormatted") ?: "Now"
                                 val status = doc.getString("status") ?: "DELIVERED"
                                 val isSeen = doc.getBoolean("isSeen") ?: false
                                 val messageType = doc.getString("messageType") ?: MessageType.TEXT.name
+                                val seenTimestamp = doc.getLong("seenTimestamp")
+                                val seenTimeFormatted = doc.getString("seenTimeFormatted")
 
-                                // Determine isFromMe safely: if senderDeviceId exists and matches, it's my own message
                                 val isFromMe = if (senderDeviceId.isNotBlank() && myDeviceId.isNotBlank()) {
                                     senderDeviceId == myDeviceId
                                 } else {
-                                    (senderId == currentUserId && currentUserId.isNotBlank() && currentUserId != "unknown" && currentUserId != "+91 98765 43210") ||
+                                    (senderId == currentUserId && currentUserId.isNotBlank() && currentUserId != "unknown") ||
                                     (senderName.isNotBlank() && currentUserName.isNotBlank() && !currentUserName.equals("VenzoInd User", ignoreCase = true) && senderName.equals(currentUserName, ignoreCase = true))
                                 }
 
-                                if (isFromMe) continue // Skip own sent messages
+                                if (isFromMe) {
+                                    // SENDER SIDE: Update my local message delivery & seen status from recipient's acknowledgement
+                                    val existing = appDatabase.messageDao().getMessageById(id)
+                                    if (existing != null && (existing.status != status || existing.isSeen != isSeen)) {
+                                        appDatabase.messageDao().updateMessageSeen(
+                                            msgId = id,
+                                            status = status,
+                                            isSeen = isSeen,
+                                            seenTimestamp = seenTimestamp,
+                                            seenTimeFormatted = seenTimeFormatted
+                                        )
+                                        appDatabase.chatDao().updateLastMessageWithStatus(
+                                            chatId = existing.chatId,
+                                            lastMsg = existing.text,
+                                            time = existing.timeFormatted,
+                                            timeMillis = existing.timestamp,
+                                            status = status,
+                                            isFromMe = true
+                                        )
+                                    }
+                                    continue
+                                }
+
+                                // RECIPIENT SIDE: Verify if this message is intended for this device/phone
+                                val cleanMyPhone = currentUserPhone.replace("+", "").replace(" ", "").trim()
+                                val cleanTargetPhone = targetPhone.replace("+", "").replace(" ", "").trim()
+
+                                val isTargetedToMe = targetDeviceId.isBlank() ||
+                                        (myDeviceId.isNotBlank() && targetDeviceId == myDeviceId) ||
+                                        (cleanTargetPhone.isNotBlank() && cleanMyPhone.isNotBlank() && cleanTargetPhone == cleanMyPhone) ||
+                                        targetDeviceId.startsWith("devika") || targetDeviceId.startsWith("aarav") ||
+                                        targetDeviceId.startsWith("rahul") || targetDeviceId.startsWith("priya") ||
+                                        targetDeviceId.startsWith("ananya") || targetDeviceId.startsWith("vikram") ||
+                                        targetDeviceId.startsWith("contact_") || targetDeviceId.startsWith("chat_")
+
+                                if (!isTargetedToMe) continue
 
                                 // Target local chat ID for this sender
                                 val safeChatId = if (senderDeviceId.isNotBlank()) "chat_${senderDeviceId}" else "chat_${senderName.lowercase().trim().replace(" ", "_")}"
@@ -202,8 +283,8 @@ class FirestoreManager private constructor(private val context: Context) {
                                         timestamp = timestamp,
                                         timeFormatted = timeFormatted,
                                         isFromMe = false,
-                                        status = status,
-                                        isSeen = isSeen,
+                                        status = "DELIVERED",
+                                        isSeen = false,
                                         messageType = messageType,
                                         attachmentUrl = doc.getString("attachmentUrl"),
                                         fileSizeStr = doc.getString("fileSizeStr"),
@@ -265,6 +346,9 @@ class FirestoreManager private constructor(private val context: Context) {
                                     }
 
                                     appDatabase.messageDao().insertMessage(entity)
+
+                                    // Confirm delivery in cloud Firestore
+                                    updateMessageStatusInCloud(id, safeChatId, "DELIVERED", isSeen = false)
                                     onIncomingMessageReceived?.invoke()
                                 }
                             } catch (e: Exception) {
@@ -285,7 +369,8 @@ class FirestoreManager private constructor(private val context: Context) {
         chatId: String,
         appDatabase: AppDatabase,
         currentUserId: String,
-        currentUserName: String
+        currentUserName: String,
+        myDeviceId: String = ""
     ) {
         val db = firestoreInstance ?: return
         if (activeChatListeners.containsKey(chatId)) return
@@ -298,73 +383,29 @@ class FirestoreManager private constructor(private val context: Context) {
                     if (error != null || snapshots == null || snapshots.isEmpty) return@addSnapshotListener
 
                     scope.launch {
-                        val messagesToInsert = mutableListOf<MessageEntity>()
-                        var latestIncomingMsg: MessageEntity? = null
-
                         for (doc in snapshots.documents) {
                             try {
                                 val id = doc.getString("id") ?: doc.id
-                                val senderId = doc.getString("senderId") ?: "unknown"
-                                val senderName = doc.getString("senderName") ?: "Contact"
-                                val text = doc.getString("text") ?: ""
-                                val timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis()
-                                val timeFormatted = doc.getString("timeFormatted") ?: "Now"
-                                val status = doc.getString("status") ?: "DELIVERED"
-                                val isSeen = doc.getBoolean("isSeen") ?: false
-                                val messageType = doc.getString("messageType") ?: MessageType.TEXT.name
+                                val senderDeviceId = doc.getString("senderDeviceId") ?: ""
+                                val isFromMe = if (senderDeviceId.isNotBlank() && myDeviceId.isNotBlank()) {
+                                    senderDeviceId == myDeviceId
+                                } else {
+                                    doc.getString("senderId") == currentUserId
+                                }
 
-                                val isFromMe = (senderId == currentUserId ||
-                                        senderId == "me" ||
-                                        (senderName.isNotBlank() && senderName.equals(currentUserName, ignoreCase = true)))
-
-                                val entity = MessageEntity(
-                                    id = id,
-                                    chatId = chatId,
-                                    senderId = senderId,
-                                    senderName = senderName,
-                                    text = text,
-                                    timestamp = timestamp,
-                                    timeFormatted = timeFormatted,
-                                    isFromMe = isFromMe,
-                                    status = status,
-                                    isSeen = isSeen,
-                                    messageType = messageType,
-                                    attachmentUrl = doc.getString("attachmentUrl"),
-                                    fileSizeStr = doc.getString("fileSizeStr"),
-                                    upiAmount = doc.getDouble("upiAmount") ?: 0.0,
-                                    upiTransactionId = doc.getString("upiTransactionId"),
-                                    upiStatus = doc.getString("upiStatus"),
-                                    voiceDurationSec = doc.getLong("voiceDurationSec")?.toInt() ?: 0,
-                                    audioWaveform = doc.getString("audioWaveform"),
-                                    pollQuestion = doc.getString("pollQuestion"),
-                                    pollOptionsJson = doc.getString("pollOptionsJson"),
-                                    pollVotesJson = doc.getString("pollVotesJson"),
-                                    isSecretExpiring = doc.getBoolean("isSecretExpiring") ?: false,
-                                    expireTimeMillis = doc.getLong("expireTimeMillis") ?: 0L,
-                                    isStarred = doc.getBoolean("isStarred") ?: false,
-                                    replyToText = doc.getString("replyToText"),
-                                    replyToSender = doc.getString("replyToSender")
-                                )
-                                messagesToInsert.add(entity)
                                 if (!isFromMe) {
-                                    latestIncomingMsg = entity
+                                    // Recipient is viewing this chat -> mark message as SEEN
+                                    updateMessageStatusInCloud(id, chatId, "SEEN", isSeen = true)
+                                    appDatabase.messageDao().updateMessageSeen(
+                                        msgId = id,
+                                        status = "SEEN",
+                                        isSeen = true,
+                                        seenTimestamp = System.currentTimeMillis(),
+                                        seenTimeFormatted = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+                                    )
                                 }
                             } catch (e: Exception) {
-                                Log.e(TAG, "Error mapping message: ${e.message}")
-                            }
-                        }
-
-                        if (messagesToInsert.isNotEmpty()) {
-                            appDatabase.messageDao().insertMessages(messagesToInsert)
-                            latestIncomingMsg?.let { incoming ->
-                                appDatabase.chatDao().updateLastMessageWithStatus(
-                                    chatId = chatId,
-                                    lastMsg = incoming.text,
-                                    time = incoming.timeFormatted,
-                                    timeMillis = incoming.timestamp,
-                                    status = "DELIVERED",
-                                    isFromMe = false
-                                )
+                                Log.e(TAG, "Error in attachChatListener: ${e.message}")
                             }
                         }
                     }
@@ -479,9 +520,16 @@ class FirestoreManager private constructor(private val context: Context) {
 
                                 val isTargetedToMe = targetDeviceId.isBlank() ||
                                         (myDeviceId.isNotBlank() && targetDeviceId == myDeviceId) ||
+                                        targetDeviceId.startsWith("devika") || targetDeviceId.startsWith("aarav") ||
+                                        targetDeviceId.startsWith("rahul") || targetDeviceId.startsWith("priya") ||
+                                        targetDeviceId.startsWith("ananya") || targetDeviceId.startsWith("vikram") ||
+                                        targetDeviceId.startsWith("contact_") || targetDeviceId.startsWith("chat_") ||
                                         receiverName.isBlank() ||
                                         receiverName.equals("All", ignoreCase = true) ||
                                         receiverName.contains("Venzo", ignoreCase = true) ||
+                                        receiverName.contains("Devika", ignoreCase = true) ||
+                                        receiverName.contains("Aarav", ignoreCase = true) ||
+                                        receiverName.contains("Rahul", ignoreCase = true) ||
                                         receiverName.equals(currentUserName, ignoreCase = true) ||
                                         (receiverPhone.isNotBlank() && (receiverPhone == currentUserPhone || receiverPhone.replace("+", "").replace(" ", "") == cleanMyPhone))
 
@@ -511,6 +559,95 @@ class FirestoreManager private constructor(private val context: Context) {
             } catch (e: Exception) {
                 Log.e(TAG, "updateCloudCallStatus error: ${e.message}")
             }
+        }
+    }
+
+    // ==========================================
+    // Cloud Status & Stories Sync (24-hour Status)
+    // ==========================================
+
+    fun publishStoryToCloud(story: StoryEntity, authorDeviceId: String = "") {
+        val db = firestoreInstance ?: return
+        scope.launch {
+            try {
+                val storyData = hashMapOf(
+                    "id" to story.id,
+                    "authorName" to story.authorName,
+                    "authorAvatar" to story.authorAvatar,
+                    "authorDeviceId" to authorDeviceId,
+                    "isAiGenerated" to story.isAiGenerated,
+                    "aiEffectName" to story.aiEffectName,
+                    "timestamp" to story.timestamp,
+                    "timeAgo" to story.timeAgo,
+                    "caption" to story.caption,
+                    "mediaGradientStart" to story.mediaGradientStart,
+                    "mediaGradientEnd" to story.mediaGradientEnd
+                )
+                db.collection("stories")
+                    .document(story.id)
+                    .set(storyData, SetOptions.merge())
+                Log.d(TAG, "Story ${story.id} published to Firestore.")
+            } catch (e: Exception) {
+                Log.e(TAG, "publishStoryToCloud error: ${e.message}")
+            }
+        }
+    }
+
+    fun listenForCloudStories(appDatabase: AppDatabase, myDeviceId: String = "") {
+        val db = firestoreInstance ?: return
+        storiesListener?.remove()
+
+        try {
+            storiesListener = db.collection("stories")
+                .addSnapshotListener { snapshots, error ->
+                    if (error != null || snapshots == null) return@addSnapshotListener
+                    scope.launch {
+                        val now = System.currentTimeMillis()
+                        val stories = mutableListOf<StoryEntity>()
+                        for (doc in snapshots.documents) {
+                            try {
+                                val timestamp = doc.getLong("timestamp") ?: 0L
+                                // Only keep stories from last 24 hours
+                                if (now - timestamp > 86400000L) continue
+
+                                val id = doc.getString("id") ?: doc.id
+                                val authorName = doc.getString("authorName") ?: "Contact"
+                                val authorAvatar = doc.getString("authorAvatar") ?: authorName.take(2).uppercase()
+                                val authorDeviceId = doc.getString("authorDeviceId") ?: ""
+                                val isAiGenerated = doc.getBoolean("isAiGenerated") ?: false
+                                val aiEffectName = doc.getString("aiEffectName") ?: ""
+                                val caption = doc.getString("caption") ?: ""
+                                val mediaGradientStart = doc.getString("mediaGradientStart") ?: "#FF671F"
+                                val mediaGradientEnd = doc.getString("mediaGradientEnd") ?: "#06038D"
+
+                                val diffMins = ((now - timestamp) / 60000L).coerceAtLeast(1)
+                                val timeAgo = if (diffMins < 60) "${diffMins}m ago" else "${diffMins / 60}h ago"
+
+                                val story = StoryEntity(
+                                    id = id,
+                                    authorName = if (authorDeviceId == myDeviceId) "My Status" else authorName,
+                                    authorAvatar = authorAvatar,
+                                    isAiGenerated = isAiGenerated,
+                                    aiEffectName = aiEffectName,
+                                    timestamp = timestamp,
+                                    timeAgo = timeAgo,
+                                    caption = caption,
+                                    isViewed = false,
+                                    mediaGradientStart = mediaGradientStart,
+                                    mediaGradientEnd = mediaGradientEnd
+                                )
+                                stories.add(story)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error parsing story: ${e.message}")
+                            }
+                        }
+                        if (stories.isNotEmpty()) {
+                            appDatabase.storyDao().insertStories(stories)
+                        }
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "listenForCloudStories error: ${e.message}")
         }
     }
 

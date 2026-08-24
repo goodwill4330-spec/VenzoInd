@@ -21,10 +21,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.example.data.model.CallEntity
 import com.example.ui.components.GlassCard
 import com.example.ui.components.LiveCameraVideoPreview
@@ -462,7 +464,14 @@ fun ActiveCallScreen(
     modifier: Modifier = Modifier
 ) {
     val callState by viewModel.activeCallState.collectAsState()
+    val isProximityNear by viewModel.isProximityNear.collectAsState()
     val bColors = LocalBharatColors.current
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.proximityHandler.stop()
+        }
+    }
 
     val infiniteTransition = rememberInfiniteTransition(label = "webrtc_pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -634,7 +643,7 @@ fun ActiveCallScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = if (!callState.isConnected) "Establishing WebRTC PeerConnection..." else timerStr,
+                    text = if (!callState.isConnected) "Calling • Ringing..." else timerStr,
                     fontSize = 15.sp,
                     color = if (callState.isConnected) BharatGreenLight else BharatElectricCyan,
                     fontWeight = FontWeight.SemiBold
@@ -973,6 +982,21 @@ fun ActiveCallScreen(
                     }
                 }
             }
+        }
+
+        // Proximity Sensor Screen-Off & Anti-Accidental Touch Overlay
+        // Turns off display / renders black screen when phone is held to ear (speaker OFF)
+        if (isProximityNear && !callState.isSpeakerOn) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(999f)
+                    .background(Color.Black)
+                    .pointerInput(Unit) {
+                        // Consumes all touch events to prevent accidental ear/cheek touches
+                    }
+                    .testTag("proximity_screen_off_overlay")
+            )
         }
     }
 }

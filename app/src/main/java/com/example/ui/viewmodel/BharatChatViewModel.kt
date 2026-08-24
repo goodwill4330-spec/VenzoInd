@@ -101,6 +101,8 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     val ttsManager = AudioAndTtsManager(application)
     val voiceRecorder = VoiceRecorderManager(application)
     val backupManager = com.example.data.backup.LocalBackupManager(application, database)
+    val proximityHandler = com.example.utils.ProximitySensorHandler(application)
+    val isProximityNear: StateFlow<Boolean> = proximityHandler.isNear
 
     // User Profile & UPI Wallet
     private val _userProfile = MutableStateFlow(UserProfile())
@@ -148,6 +150,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
             val firestore = com.example.data.sync.FirestoreManager.getInstance(getApplication())
             firestore.publishUserProfile(profile, devId)
             firestore.listenForCloudUsers(database, profile.name, devId)
+            firestore.listenForCloudStories(database, devId)
 
             // Auto-sync local phonebook contacts with Firestore registered users
             val contactProvider = com.example.data.contacts.ContactProvider.getInstance(getApplication(), database)
@@ -161,6 +164,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 appDatabase = database,
                 currentUserId = profile.phone.ifBlank { profile.bharatId },
                 currentUserName = profile.name,
+                currentUserPhone = profile.phone.ifBlank { profile.bharatId },
                 myDeviceId = devId
             )
             firestore.listenForIncomingCalls(
@@ -187,7 +191,11 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                             webrtcBitrateKbps = if (_activeCallState.value.isVideo) 2850 else 320
                         )
                     } else if (status == "DECLINED" || status == "ENDED") {
-                        endCall(notifyCloud = false)
+                        if (currentCallId == callId || _currentScreen.value == AppScreen.ACTIVE_CALL) {
+                            endCall(notifyCloud = false)
+                        }
+                        syncManager.clearIncomingCall()
+                        ttsManager.stopCallTones()
                     }
                 }
             )
@@ -770,15 +778,45 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
 
     fun sendImageMessage(imageUri: String, caption: String = "") {
         val chatId = _activeChatId.value ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
+            val base64Data = convertImageUriToBase64(getApplication(), imageUri)
             repository.sendMessage(
                 chatId = chatId,
                 text = caption.ifBlank { "📷 Photo" },
                 messageType = MessageType.IMAGE,
-                attachmentUrl = imageUri,
-                fileSizeStr = "High Res • Sovereign Protected"
+                attachmentUrl = if (base64Data.isNotBlank()) base64Data else imageUri,
+                fileSizeStr = "High Res • Photo"
             )
             showAttachmentOptions.value = false
+        }
+    }
+
+    private fun convertImageUriToBase64(context: android.content.Context, uriString: String): String {
+        if (uriString.startsWith("data:image/") || uriString.startsWith("http://") || uriString.startsWith("https://")) {
+            return uriString
+        }
+        return try {
+            val uri = android.net.Uri.parse(uriString)
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+            inputStream?.close()
+            if (bitmap != null) {
+                val maxDim = 800
+                val scaled = if (bitmap.width > maxDim || bitmap.height > maxDim) {
+                    val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
+                    val width = if (ratio > 1) maxDim else (maxDim * ratio).toInt()
+                    val height = if (ratio > 1) (maxDim / ratio).toInt() else maxDim
+                    android.graphics.Bitmap.createScaledBitmap(bitmap, width, height, true)
+                } else bitmap
+                val outputStream = java.io.ByteArrayOutputStream()
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, outputStream)
+                val bytes = outputStream.toByteArray()
+                "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            } else {
+                uriString
+            }
+        } catch (e: Exception) {
+            uriString
         }
     }
 
@@ -938,6 +976,40 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun postNewStory(
+        caption: String,
+        gradientStart: String = "#FF671F",
+        gradientEnd: String = "#06038D",
+        isAiGenerated: Boolean = false,
+        aiEffectName: String = ""
+    ) {
+        viewModelScope.launch {
+            val myName = _userProfile.value.name.ifBlank { "You" }
+            val myAvatar = _userProfile.value.avatarInitial.ifBlank { "ME" }
+            val now = System.currentTimeMillis()
+            val story = StoryEntity(
+                id = "story_${UUID.randomUUID()}",
+                authorName = myName,
+                authorAvatar = myAvatar,
+                isAiGenerated = isAiGenerated,
+                aiEffectName = aiEffectName,
+                timestamp = now,
+                timeAgo = "Just now",
+                caption = caption,
+                isViewed = false,
+                mediaGradientStart = gradientStart,
+                mediaGradientEnd = gradientEnd
+            )
+            database.storyDao().insertStory(story)
+            try {
+                val devId = profileDataStore.getDeviceId()
+                com.example.data.sync.FirestoreManager.getInstance(getApplication()).publishStoryToCloud(story, authorDeviceId = devId)
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
     fun openStory(story: StoryEntity) {
         _activeStory.value = story
         _currentScreen.value = AppScreen.STORY_VIEWER
@@ -951,20 +1023,32 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         _currentScreen.value = AppScreen.MAIN_APP
     }
 
-    fun startCall(contactName: String, contactAvatar: String, isVideo: Boolean) {
+    fun startCall(
+        contactName: String,
+        contactAvatar: String,
+        isVideo: Boolean,
+        contactPhone: String = "",
+        targetDeviceId: String = ""
+    ) {
         val safeName = contactName.ifBlank { "Contact" }
         val safeAvatar = if (contactAvatar.isNotBlank()) contactAvatar else safeName.take(2).uppercase()
         val callId = "call_${UUID.randomUUID()}"
         currentCallId = callId
 
+        val defaultSpeaker = isVideo
         _activeCallState.value = ActiveCallState(
             contactName = safeName,
             contactAvatar = safeAvatar,
             isVideo = isVideo,
+            isSpeakerOn = defaultSpeaker,
             isConnected = false,
             durationSeconds = 0
         )
         _currentScreen.value = AppScreen.ACTIVE_CALL
+
+        // Setup audio route & Proximity Sensor
+        ttsManager.setSpeakerOn(defaultSpeaker)
+        proximityHandler.start(isSpeakerOn = defaultSpeaker)
 
         // Play dial tone while connecting
         ttsManager.playCallDialTone()
@@ -974,15 +1058,16 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
             val devId = profileDataStore.getDeviceId()
             val myUid = _userProfile.value.phone.ifBlank { _userProfile.value.bharatId }
             val activeChat = _activeChatId.value ?: ""
-            val targetDev = if (activeChat.startsWith("chat_dev_")) activeChat.removePrefix("chat_") else ""
+            val resolvedTargetDev = if (targetDeviceId.isNotBlank()) targetDeviceId else (if (activeChat.startsWith("chat_")) activeChat.removePrefix("chat_") else "")
             com.example.data.sync.FirestoreManager.getInstance(getApplication()).initiateCloudCall(
                 callId = callId,
                 callerId = myUid,
                 callerName = _userProfile.value.name,
                 callerAvatar = _userProfile.value.avatarInitial,
                 callerDeviceId = devId,
-                targetDeviceId = targetDev,
+                targetDeviceId = resolvedTargetDev,
                 receiverName = safeName,
+                receiverPhone = contactPhone,
                 isVideo = isVideo
             ) { status ->
                 if (status == "ACCEPTED") {
@@ -1003,16 +1088,15 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
 
         callTimerJob?.cancel()
         callTimerJob = viewModelScope.launch {
-            // Auto connect fallback after 3s if peer is ready or simulated
-            delay(3000)
+            var waited = 0
+            while (!_activeCallState.value.isConnected && waited < 45) {
+                delay(1000)
+                waited++
+            }
             if (!_activeCallState.value.isConnected) {
-                ttsManager.stopCallTones()
-                ttsManager.playCallConnectedTone()
-                _activeCallState.value = _activeCallState.value.copy(
-                    isConnected = true,
-                    webrtcLatencyMs = 16 + (0..12).random(),
-                    webrtcBitrateKbps = if (isVideo) 2850 else 320
-                )
+                // Call not answered after 45s
+                endCall(notifyCloud = true)
+                return@launch
             }
             while (true) {
                 delay(1000)
@@ -1029,7 +1113,9 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun toggleMute() {
-        _activeCallState.value = _activeCallState.value.copy(isMuted = !_activeCallState.value.isMuted)
+        val newMute = !_activeCallState.value.isMuted
+        _activeCallState.value = _activeCallState.value.copy(isMuted = newMute)
+        ttsManager.setMicrophoneMute(newMute)
     }
 
     fun toggleVideo() {
@@ -1037,7 +1123,10 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun toggleSpeaker() {
-        _activeCallState.value = _activeCallState.value.copy(isSpeakerOn = !_activeCallState.value.isSpeakerOn)
+        val newSpeaker = !_activeCallState.value.isSpeakerOn
+        _activeCallState.value = _activeCallState.value.copy(isSpeakerOn = newSpeaker)
+        ttsManager.setSpeakerOn(newSpeaker)
+        proximityHandler.setSpeakerOn(newSpeaker)
     }
 
     fun flipCamera() {
@@ -1058,6 +1147,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         currentCallId = null
 
         callTimerJob?.cancel()
+        proximityHandler.stop()
         ttsManager.stopCallTones()
         ttsManager.playCallEndTone()
 
@@ -1181,10 +1271,15 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 // Ignore
             }
 
+            val isSpeaker = call.isVideo
+            ttsManager.setSpeakerOn(isSpeaker)
+            proximityHandler.start(isSpeakerOn = isSpeaker)
+
             _activeCallState.value = ActiveCallState(
                 contactName = call.callerName,
                 contactAvatar = call.callerAvatar,
                 isVideo = call.isVideo,
+                isSpeakerOn = isSpeaker,
                 isConnected = true,
                 durationSeconds = 0
             )
@@ -1415,6 +1510,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         super.onCleared()
         callTimerJob?.cancel()
         recordTimerJob?.cancel()
+        proximityHandler.stop()
         ttsManager.shutdown()
     }
 }

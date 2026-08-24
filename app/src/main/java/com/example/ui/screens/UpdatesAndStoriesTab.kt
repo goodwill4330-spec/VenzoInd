@@ -42,7 +42,21 @@ fun UpdatesTab(
 ) {
     val stories by viewModel.stories.collectAsState()
     val channels by viewModel.channels.collectAsState()
+    val userProfile by viewModel.userProfile.collectAsState()
     val bColors = LocalBharatColors.current
+
+    var showAddStatusDialog by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf("") }
+    var selectedGradientIndex by remember { mutableIntStateOf(0) }
+    var isAiEffectActive by remember { mutableStateOf(false) }
+
+    val gradientPresets = listOf(
+        Pair("#FF671F", "#06038D") to "Saffron & Navy",
+        Pair("#8B5CF6", "#EC4899") to "Royal Violet",
+        Pair("#059669", "#0284C7") to "Emerald Cyan",
+        Pair("#DC2626", "#F59E0B") to "Sunset Crimson",
+        Pair("#0F172A", "#1E293B") to "Midnight Sovereign"
+    )
 
     LazyColumn(
         modifier = modifier
@@ -72,7 +86,8 @@ fun UpdatesTab(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
                                 .width(72.dp)
-                                .clickable { }
+                                .clickable { showAddStatusDialog = true }
+                                .testTag("my_status_button")
                         ) {
                             Box(
                                 modifier = Modifier.size(56.dp),
@@ -86,7 +101,7 @@ fun UpdatesTab(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "ME",
+                                        text = userProfile.avatarInitial.ifBlank { "ME" },
                                         color = BharatWhite,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp
@@ -118,7 +133,7 @@ fun UpdatesTab(
                                 maxLines = 1
                             )
                             Text(
-                                text = "+ AI Effect",
+                                text = "+ Post Update",
                                 fontSize = 9.5.sp,
                                 color = BharatElectricCyan,
                                 fontWeight = FontWeight.Bold
@@ -210,6 +225,126 @@ fun UpdatesTab(
                 onToggleJoin = { viewModel.toggleJoinChannel(channel.id, channel.isJoined) }
             )
         }
+    }
+
+    if (showAddStatusDialog) {
+        val currentGradient = gradientPresets[selectedGradientIndex].first
+        val gradStart = Color(android.graphics.Color.parseColor(currentGradient.first))
+        val gradEnd = Color(android.graphics.Color.parseColor(currentGradient.second))
+
+        AlertDialog(
+            onDismissRequest = { showAddStatusDialog = false },
+            title = {
+                Text(
+                    text = "Post Status / Story (नया स्टेटस)",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = bColors.textPrimary
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Preview Card
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Brush.linearGradient(listOf(gradStart, gradEnd)))
+                            .padding(14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = statusText.ifBlank { "Type your status message here..." },
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+
+                    // Text input
+                    OutlinedTextField(
+                        value = statusText,
+                        onValueChange = { statusText = it },
+                        placeholder = { Text("What's on your mind? (आज क्या नया है?)") },
+                        singleLine = false,
+                        maxLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Gradient Colors Selector
+                    Text("Select Background Theme:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = bColors.textSecondary)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        gradientPresets.forEachIndexed { index, (colors, _) ->
+                            val sCol = Color(android.graphics.Color.parseColor(colors.first))
+                            val eCol = Color(android.graphics.Color.parseColor(colors.second))
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Brush.linearGradient(listOf(sCol, eCol)))
+                                    .border(
+                                        width = if (selectedGradientIndex == index) 3.dp else 1.dp,
+                                        color = if (selectedGradientIndex == index) BharatWhite else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { selectedGradientIndex = index }
+                            )
+                        }
+                    }
+
+                    // AI Sovereign Badge Toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isAiEffectActive = !isAiEffectActive },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isAiEffectActive,
+                            onCheckedChange = { isAiEffectActive = it }
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add AI Sovereign Spark ✨", fontSize = 13.sp, color = bColors.textPrimary)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val textToPost = statusText.ifBlank { "Feeling inspired on VenzoInd 🇮🇳" }
+                        val (startHex, endHex) = gradientPresets[selectedGradientIndex].first
+                        viewModel.postNewStory(
+                            caption = textToPost,
+                            gradientStart = startHex,
+                            gradientEnd = endHex,
+                            isAiGenerated = isAiEffectActive,
+                            aiEffectName = if (isAiEffectActive) "Sovereign Aura" else ""
+                        )
+                        statusText = ""
+                        showAddStatusDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight)
+                ) {
+                    Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Post Status")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddStatusDialog = false }) {
+                    Text("Cancel", color = bColors.textSecondary)
+                }
+            },
+            containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated
+        )
     }
 }
 

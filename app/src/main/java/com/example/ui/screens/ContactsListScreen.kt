@@ -544,7 +544,12 @@ fun ContactsListScreen(
                                 )
                             },
                             onCallClick = { isVideo ->
-                                viewModel.startCall(contact.name, contact.avatarInitial, isVideo)
+                                viewModel.startCall(
+                                    contactName = contact.name,
+                                    contactAvatar = contact.avatarInitial,
+                                    isVideo = isVideo,
+                                    contactPhone = contact.phone
+                                )
                             },
                             onUpiClick = {
                                 viewModel.showUpiPaymentSheet.value = true

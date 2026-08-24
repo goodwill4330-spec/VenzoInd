@@ -142,7 +142,12 @@ class BharatChatRepository(
         context?.let { ctx ->
             try {
                 val devId = com.example.data.local.UserProfileDataStore(ctx).getDeviceId()
-                FirestoreManager.getInstance(ctx).syncMessageToCloud(message, senderDeviceId = devId)
+                val targetDev = if (chatId.startsWith("chat_")) chatId.removePrefix("chat_") else ""
+                FirestoreManager.getInstance(ctx).syncMessageToCloud(
+                    message = message,
+                    senderDeviceId = devId,
+                    targetDeviceId = targetDev
+                )
             } catch (e: Exception) {
                 // Resilient local persistence
             }
@@ -159,18 +164,6 @@ class BharatChatRepository(
         }
 
         chatDao.updateLastMessageWithStatus(chatId, lastDisplayMsg, timeStr, now, "SENT", true)
-
-        // Asynchronously update status from SENT -> DELIVERED -> SEEN (double blue checkmarks)
-        CoroutineScope(Dispatchers.IO).launch {
-            delay(500)
-            messageDao.updateMessageStatus(msgId, "DELIVERED")
-            chatDao.updateLastMessageWithStatus(chatId, lastDisplayMsg, timeStr, now, "DELIVERED", true)
-            delay(1000)
-            val seenTime = System.currentTimeMillis()
-            val seenTimeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(seenTime))
-            messageDao.updateMessageSeen(msgId, "SEEN", isSeen = true, seenTimestamp = seenTime, seenTimeFormatted = seenTimeStr)
-            chatDao.updateLastMessageWithStatus(chatId, lastDisplayMsg, timeStr, now, "SEEN", true)
-        }
 
         // If message to Bharat AI, trigger AI response
         if (chatId == "chat_ai_assistant") {

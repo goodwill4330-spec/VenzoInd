@@ -410,8 +410,19 @@ fun ChatDetailScreen(
                         }
 
                         // Call Actions
+                        val targetDev = if (chat.id.startsWith("chat_")) chat.id.removePrefix("chat_") else ""
+                        val targetPhone = chat.subtitle.filter { it.isDigit() || it == '+' }
+
                         IconButton(
-                            onClick = { viewModel.startCall(chat.title, chat.avatarInitial, isVideo = false) },
+                            onClick = {
+                                viewModel.startCall(
+                                    contactName = chat.title,
+                                    contactAvatar = chat.avatarInitial,
+                                    isVideo = false,
+                                    contactPhone = targetPhone,
+                                    targetDeviceId = targetDev
+                                )
+                            },
                             modifier = Modifier.testTag("voice_call_button")
                         ) {
                             Icon(
@@ -423,7 +434,15 @@ fun ChatDetailScreen(
                         }
 
                         IconButton(
-                            onClick = { viewModel.startCall(chat.title, chat.avatarInitial, isVideo = true) },
+                            onClick = {
+                                viewModel.startCall(
+                                    contactName = chat.title,
+                                    contactAvatar = chat.avatarInitial,
+                                    isVideo = true,
+                                    contactPhone = targetPhone,
+                                    targetDeviceId = targetDev
+                                )
+                            },
                             modifier = Modifier.testTag("video_call_button")
                         ) {
                             Icon(

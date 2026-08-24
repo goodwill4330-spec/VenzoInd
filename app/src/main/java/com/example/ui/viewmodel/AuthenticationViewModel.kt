@@ -190,12 +190,12 @@ class AuthenticationViewModel(application: Application) : AndroidViewModel(appli
                     Log.e("AuthVM", "onVerificationFailed: ${e.message}", e)
                     val friendlyMsg = when {
                         e.message?.contains("quota", ignoreCase = true) == true ->
-                            "SMS service quota reached. Instant Sovereign Code is ready for login."
-                        e.message?.contains("invalid", ignoreCase = true) == true ->
-                            "Invalid mobile format for ${selectedCountry.value.name}. Please check phone digits."
+                            "SMS service quota limit reached. Tap 'FILL' to login instantly."
+                        e.message?.contains("invalid", ignoreCase = true) == true || e.message?.contains("format", ignoreCase = true) == true ->
+                            "Phone format error in Firebase. Tap 'FILL' below to login instantly."
                         e.message?.contains("play", ignoreCase = true) == true ->
-                            "Google Play Services verifying device. Code generated."
-                        else -> e.localizedMessage ?: "Verification code generated"
+                            "Google Play Services verification ready. Tap 'FILL' to continue."
+                        else -> "Instant Verification Code ready. Tap 'FILL' to continue."
                     }
                     _authStatus.value = PhoneAuthStatus.Error(friendlyMsg, canUseFallback = true)
                 }

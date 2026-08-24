@@ -16,7 +16,7 @@ enum class DeviceRole(
     val nodeColorHex: String
 ) {
     PHONE_1(
-        deviceName = "Phone 1 (Primary Saffron Node)",
+        deviceName = "Phone 1 (Primary Node)",
         ownerName = "Vikram Aditya",
         phone = "+91 98765 43210",
         avatarInitial = "VA",
@@ -24,11 +24,11 @@ enum class DeviceRole(
         nodeColorHex = "#FF671F"
     ),
     PHONE_2(
-        deviceName = "Phone 2 (Secondary Green Node)",
-        ownerName = "Ananya Sen",
+        deviceName = "Phone 2 (Secondary Node)",
+        ownerName = "Gufran",
         phone = "+91 98123 45678",
-        avatarInitial = "AS",
-        upiVpa = "ananya@upi",
+        avatarInitial = "G",
+        upiVpa = "gufran@upi",
         nodeColorHex = "#046A38"
     )
 }
@@ -37,16 +37,17 @@ data class SyncPairStatus(
     val isPaired: Boolean = true,
     val pairCode: String = "1947",
     val activeRole: DeviceRole = DeviceRole.PHONE_1,
-    val autoReplyEnabled: Boolean = true,
+    val autoReplyEnabled: Boolean = false,
     val simulatedDelayMs: Long = 1200L,
     val connectedDevicesCount: Int = 2
 )
 
 data class IncomingCallEvent(
+    val callId: String = "",
     val callerName: String,
     val callerAvatar: String,
     val isVideo: Boolean,
-    val callerPhone: String
+    val callerPhone: String = ""
 )
 
 data class IncomingUpiEvent(
@@ -79,9 +80,9 @@ class MultiDeviceSyncManager {
             )
             DeviceRole.PHONE_2 -> UserProfile(
                 name = DeviceRole.PHONE_2.ownerName,
-                bharatId = "@ananya_bharat",
+                bharatId = "@gufran_bharat",
                 phone = DeviceRole.PHONE_2.phone,
-                email = "ananya.sen@bharat.in",
+                email = "gufran@bharat.in",
                 upiVpa = DeviceRole.PHONE_2.upiVpa,
                 walletBalance = 22400.00
             )
@@ -96,10 +97,26 @@ class MultiDeviceSyncManager {
         _syncStatus.value = _syncStatus.value.copy(autoReplyEnabled = enabled)
     }
 
+    fun triggerIncomingCall(
+        callId: String = "call_${UUID.randomUUID()}",
+        callerName: String,
+        callerAvatar: String,
+        isVideo: Boolean,
+        callerPhone: String = ""
+    ) {
+        _incomingCall.value = IncomingCallEvent(
+            callId = callId,
+            callerName = callerName,
+            callerAvatar = callerAvatar,
+            isVideo = isVideo,
+            callerPhone = callerPhone
+        )
+    }
+
     fun triggerSimulatedIncomingCall(isVideo: Boolean = false) {
         val currentRole = _syncStatus.value.activeRole
         val caller = if (currentRole == DeviceRole.PHONE_1) DeviceRole.PHONE_2 else DeviceRole.PHONE_1
-        _incomingCall.value = IncomingCallEvent(
+        triggerIncomingCall(
             callerName = caller.ownerName,
             callerAvatar = caller.avatarInitial,
             isVideo = isVideo,

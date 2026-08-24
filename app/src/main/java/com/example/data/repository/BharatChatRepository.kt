@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.data.ai.GeminiAiService
 import com.example.data.local.AppDatabase
 import com.example.data.model.*
+import com.example.data.sync.FirestoreManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -14,7 +15,8 @@ import java.util.*
 
 class BharatChatRepository(
     private val database: AppDatabase,
-    val aiService: GeminiAiService = GeminiAiService()
+    val aiService: GeminiAiService = GeminiAiService(),
+    private val context: Context? = null
 ) {
     private val chatDao = database.chatDao()
     private val messageDao = database.messageDao()
@@ -133,6 +135,15 @@ class BharatChatRepository(
         )
 
         messageDao.insertMessage(message)
+
+        // Sync to cloud Firestore in real-time
+        context?.let { ctx ->
+            try {
+                FirestoreManager.getInstance(ctx).syncMessageToCloud(message)
+            } catch (e: Exception) {
+                // Resilient local persistence
+            }
+        }
 
         val lastDisplayMsg = when (messageType) {
             MessageType.UPI_PAYMENT -> "💳 Paid ₹${upiAmount?.toInt()}"

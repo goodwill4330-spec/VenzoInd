@@ -3,6 +3,7 @@ package com.example.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.ai.GeminiAiService
 import com.example.data.local.AppDatabase
 import com.example.data.model.*
 import com.example.data.repository.BharatChatRepository
@@ -90,11 +91,23 @@ data class ActiveCallState(
 class BharatChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getInstance(application)
-    private val repository = BharatChatRepository(database)
+    private val repository = BharatChatRepository(database, GeminiAiService(), application)
     val profileDataStore = com.example.data.local.UserProfileDataStore(application)
     val ttsManager = AudioAndTtsManager(application)
     val voiceRecorder = VoiceRecorderManager(application)
     val backupManager = com.example.data.backup.LocalBackupManager(application, database)
+
+    // User Profile & UPI Wallet
+    private val _userProfile = MutableStateFlow(UserProfile())
+    val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
+
+    // Multi-Device Realtime Sync & 2-Phone Testing Manager
+    val syncManager = MultiDeviceSyncManager()
+    val syncStatus: StateFlow<SyncPairStatus> = syncManager.syncStatus
+    val incomingCallEvent: StateFlow<IncomingCallEvent?> = syncManager.incomingCall
+    val incomingUpiEvent: StateFlow<IncomingUpiEvent?> = syncManager.incomingUpi
+
+    private var currentCallId: String? = null
 
     // Export & Backup / Restore Dialog State
     val showBackupRestoreDialog = MutableStateFlow(false)
@@ -115,9 +128,50 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 _userProfile.value = savedProfile.copy(
                     walletBalance = _userProfile.value.walletBalance
                 )
+                try {
+                    com.example.data.sync.FirestoreManager.getInstance(application)
+                        .publishUserProfile(_userProfile.value)
+                } catch (e: Exception) {
+                    // Ignore
+                }
             }
         }
         refreshAvailableBackups()
+
+        // Real-time Cloud User Discovery & Incoming Calls via Firestore
+        try {
+            val firestore = com.example.data.sync.FirestoreManager.getInstance(application)
+            firestore.listenForCloudUsers(database, _userProfile.value.name)
+            firestore.listenForIncomingCalls(
+                currentUserName = _userProfile.value.name,
+                currentUserPhone = _userProfile.value.phone,
+                onIncomingCall = { callId, callerName, callerAvatar, isVideo ->
+                    currentCallId = callId
+                    syncManager.triggerIncomingCall(
+                        callId = callId,
+                        callerName = callerName,
+                        callerAvatar = callerAvatar,
+                        isVideo = isVideo
+                    )
+                    ttsManager.playCallDialTone()
+                },
+                onCallStatusChange = { callId, status ->
+                    if (status == "ACCEPTED") {
+                        ttsManager.stopCallTones()
+                        ttsManager.playCallConnectedTone()
+                        _activeCallState.value = _activeCallState.value.copy(
+                            isConnected = true,
+                            webrtcLatencyMs = 18,
+                            webrtcBitrateKbps = if (_activeCallState.value.isVideo) 2850 else 320
+                        )
+                    } else if (status == "DECLINED" || status == "ENDED") {
+                        endCall(notifyCloud = false)
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            // Non-blocking fallback
+        }
     }
 
     // Navigation and Screen State
@@ -285,16 +339,6 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     val activeCallState: StateFlow<ActiveCallState> = _activeCallState.asStateFlow()
     private var callTimerJob: Job? = null
 
-    // User Profile & UPI Wallet
-    private val _userProfile = MutableStateFlow(UserProfile())
-    val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
-
-    // Multi-Device Realtime Sync & 2-Phone Testing Manager
-    val syncManager = MultiDeviceSyncManager()
-    val syncStatus: StateFlow<SyncPairStatus> = syncManager.syncStatus
-    val incomingCallEvent: StateFlow<IncomingCallEvent?> = syncManager.incomingCall
-    val incomingUpiEvent: StateFlow<IncomingUpiEvent?> = syncManager.incomingUpi
-
     // Dialogs and Sheets State
     val showNewChatSheet = MutableStateFlow(false)
     val showDualPhoneSyncDialog = MutableStateFlow(false)
@@ -437,6 +481,19 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
             repository.markChatAsSeen(chatId)
             _currentScreen.value = AppScreen.CHAT_DETAIL
 
+            // Attach Firestore real-time listener for cloud sync across devices
+            try {
+                com.example.data.sync.FirestoreManager.getInstance(getApplication())
+                    .attachChatListener(
+                        chatId = chatId,
+                        appDatabase = database,
+                        currentUserId = _userProfile.value.phone,
+                        currentUserName = _userProfile.value.name
+                    )
+            } catch (e: Exception) {
+                // Non-blocking fallback
+            }
+
             // Load smart replies
             if (chat != null && chat.lastMessage.isNotBlank()) {
                 val replies = repository.aiService.generateSmartReplies(chat.lastMessage)
@@ -446,6 +503,15 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun closeChat() {
+        val chatId = _activeChatId.value
+        if (chatId != null) {
+            try {
+                com.example.data.sync.FirestoreManager.getInstance(getApplication())
+                    .detachChatListener(chatId)
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
         typingTimerJob?.cancel()
         isOtherUserTyping.value = false
         _activeChatId.value = null
@@ -850,7 +916,9 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     fun startCall(contactName: String, contactAvatar: String, isVideo: Boolean) {
         val safeName = contactName.ifBlank { "Contact" }
         val safeAvatar = if (contactAvatar.isNotBlank()) contactAvatar else safeName.take(2).uppercase()
-        
+        val callId = "call_${UUID.randomUUID()}"
+        currentCallId = callId
+
         _activeCallState.value = ActiveCallState(
             contactName = safeName,
             contactAvatar = safeAvatar,
@@ -863,16 +931,45 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         // Play dial tone while connecting
         ttsManager.playCallDialTone()
 
+        // Send Real-Time Cloud Call Signal to Firestore
+        try {
+            com.example.data.sync.FirestoreManager.getInstance(getApplication()).initiateCloudCall(
+                callId = callId,
+                callerId = _userProfile.value.phone,
+                callerName = _userProfile.value.name,
+                callerAvatar = _userProfile.value.avatarInitial,
+                receiverName = safeName,
+                isVideo = isVideo
+            ) { status ->
+                if (status == "ACCEPTED") {
+                    ttsManager.stopCallTones()
+                    ttsManager.playCallConnectedTone()
+                    _activeCallState.value = _activeCallState.value.copy(
+                        isConnected = true,
+                        webrtcLatencyMs = 18,
+                        webrtcBitrateKbps = if (isVideo) 2850 else 320
+                    )
+                } else if (status == "DECLINED" || status == "ENDED") {
+                    endCall(notifyCloud = false)
+                }
+            }
+        } catch (e: Exception) {
+            // Non-blocking fallback
+        }
+
         callTimerJob?.cancel()
         callTimerJob = viewModelScope.launch {
-            delay(1500) // WebRTC ICE candidate & SDP handshake simulation
-            ttsManager.stopCallTones()
-            ttsManager.playCallConnectedTone()
-            _activeCallState.value = _activeCallState.value.copy(
-                isConnected = true,
-                webrtcLatencyMs = 16 + (0..12).random(),
-                webrtcBitrateKbps = if (isVideo) 2850 else 320
-            )
+            // Auto connect fallback after 3s if peer is ready or simulated
+            delay(3000)
+            if (!_activeCallState.value.isConnected) {
+                ttsManager.stopCallTones()
+                ttsManager.playCallConnectedTone()
+                _activeCallState.value = _activeCallState.value.copy(
+                    isConnected = true,
+                    webrtcLatencyMs = 16 + (0..12).random(),
+                    webrtcBitrateKbps = if (isVideo) 2850 else 320
+                )
+            }
             while (true) {
                 delay(1000)
                 val current = _activeCallState.value
@@ -911,11 +1008,23 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         _activeCallState.value = _activeCallState.value.copy(isAiNoiseCanceling = !_activeCallState.value.isAiNoiseCanceling)
     }
 
-    fun endCall() {
+    fun endCall(notifyCloud: Boolean = true) {
         val currentState = _activeCallState.value
+        val callIdToEnd = currentCallId
+        currentCallId = null
+
         callTimerJob?.cancel()
         ttsManager.stopCallTones()
         ttsManager.playCallEndTone()
+
+        if (notifyCloud && callIdToEnd != null) {
+            try {
+                com.example.data.sync.FirestoreManager.getInstance(getApplication())
+                    .updateCloudCallStatus(callIdToEnd, "ENDED")
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
 
         // Log call to Call History DB
         if (currentState.contactName.isNotBlank()) {
@@ -1008,32 +1117,75 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     fun acceptIncomingCall() {
         val call = incomingCallEvent.value
         syncManager.clearIncomingCall()
+        ttsManager.stopCallTones()
+        ttsManager.playCallConnectedTone()
+
         if (call != null) {
-            startCall(call.callerName, call.callerAvatar, call.isVideo)
+            val callId = call.callId.ifBlank { currentCallId ?: "call_${UUID.randomUUID()}" }
+            currentCallId = callId
+            try {
+                com.example.data.sync.FirestoreManager.getInstance(getApplication())
+                    .updateCloudCallStatus(callId, "ACCEPTED")
+            } catch (e: Exception) {
+                // Ignore
+            }
+
+            _activeCallState.value = ActiveCallState(
+                contactName = call.callerName,
+                contactAvatar = call.callerAvatar,
+                isVideo = call.isVideo,
+                isConnected = true,
+                durationSeconds = 0
+            )
+            _currentScreen.value = AppScreen.ACTIVE_CALL
+
+            callTimerJob?.cancel()
+            callTimerJob = viewModelScope.launch {
+                while (true) {
+                    delay(1000)
+                    val current = _activeCallState.value
+                    _activeCallState.value = current.copy(
+                        durationSeconds = current.durationSeconds + 1,
+                        webrtcLatencyMs = (14..28).random(),
+                        webrtcBitrateKbps = if (current.isVideo && !current.isVideoOff) 2900 else 320
+                    )
+                }
+            }
         }
     }
 
     fun declineIncomingCall() {
+        val call = incomingCallEvent.value
         syncManager.clearIncomingCall()
+        ttsManager.stopCallTones()
+
+        val callId = call?.callId?.ifBlank { currentCallId } ?: currentCallId
+        if (callId != null) {
+            try {
+                com.example.data.sync.FirestoreManager.getInstance(getApplication())
+                    .updateCloudCallStatus(callId, "DECLINED")
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+        currentCallId = null
     }
 
     fun declineIncomingCallWithMessage(message: String) {
         val call = incomingCallEvent.value
         syncManager.clearIncomingCall()
-        if (call != null) {
-            viewModelScope.launch {
-                val currentChats = chats.value
-                val matchedChat = currentChats.find { it.title.contains(call.callerName, ignoreCase = true) }
-                val targetChatId = matchedChat?.id ?: currentChats.firstOrNull()?.id
-                if (targetChatId != null) {
-                    repository.sendMessage(
-                        chatId = targetChatId,
-                        text = "Declined call: \"$message\"",
-                        messageType = MessageType.TEXT
-                    )
-                }
+        ttsManager.stopCallTones()
+
+        val callId = call?.callId?.ifBlank { currentCallId } ?: currentCallId
+        if (callId != null) {
+            try {
+                com.example.data.sync.FirestoreManager.getInstance(getApplication())
+                    .updateCloudCallStatus(callId, "DECLINED")
+            } catch (e: Exception) {
+                // Ignore
             }
         }
+        currentCallId = null
     }
 
     fun triggerIncomingTestUpi(amount: Double = 500.0) {

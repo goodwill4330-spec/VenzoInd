@@ -58,6 +58,70 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > app/local.properties
           echo "GEMINI_API_KEY=AIzaSyFakeKeyForCiWorkflowOnly12345" >> app/local.properties
 
+          # Ensure app/google-services.json is always present
+          if [ ! -f "app/google-services.json" ]; then
+            cat << 'EOF' > app/google-services.json
+{
+  "project_info": {
+    "project_number": "505106989844",
+    "project_id": "bharatchat-sovereign",
+    "storage_bucket": "bharatchat-sovereign.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:505106989844:android:bharatchat",
+        "android_client_info": {
+          "package_name": "com.aistudio.bharatchat.vnrkzp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "505106989844-mockclientid.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0haratChatSecureFallbackKey2026"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:505106989844:android:bharatchat2",
+        "android_client_info": {
+          "package_name": "com.example"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "505106989844-mockclientid2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0haratChatSecureFallbackKey2026"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+EOF
+          fi
+
       - name: Build Debug APK
         run: |
           gradle :app:assembleDebug -x test -x lint --no-daemon

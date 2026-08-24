@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -38,6 +39,8 @@ fun CallsTab(
 ) {
     val calls by viewModel.calls.collectAsState()
     val bColors = LocalBharatColors.current
+    var showDirectCallDialog by remember { mutableStateOf(false) }
+    var directCallNameOrPhone by remember { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -81,13 +84,13 @@ fun CallsTab(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "4K HDR & HD Voice Calling",
+                                text = "HD Voice & 4K Video Calling",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = BharatWhite
                             )
                             Text(
-                                text = "AI Noise Cancelling • Quantum Protected",
+                                text = "AI Noise Cancelling • Quantum Encrypted",
                                 fontSize = 11.5.sp,
                                 color = BharatElectricCyan
                             )
@@ -179,46 +182,179 @@ fun CallsTab(
                 color = bColors.textPrimary
             )
 
-            TextButton(
-                onClick = { viewModel.navigateTo(com.example.ui.viewmodel.AppScreen.CONTACTS_LIST) },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Contacts,
-                    contentDescription = null,
-                    tint = BharatElectricCyan,
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Phonebook",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = BharatElectricCyan
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = { showDirectCallDialog = true },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Dialpad,
+                        contentDescription = null,
+                        tint = BharatSaffron,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Dial",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BharatSaffron
+                    )
+                }
+
+                TextButton(
+                    onClick = { viewModel.navigateTo(com.example.ui.viewmodel.AppScreen.CONTACTS_LIST) },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Contacts,
+                        contentDescription = null,
+                        tint = BharatElectricCyan,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Phonebook",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BharatElectricCyan
+                    )
+                }
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(calls, key = { it.id }) { call ->
-                CallItemRow(
-                    call = call,
-                    onCallClick = {
-                        viewModel.startCall(call.contactName, call.contactAvatar, call.isVideo)
+        if (calls.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 40.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .background(BharatNavyLight.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhoneCallback,
+                            contentDescription = null,
+                            tint = BharatGreenLight,
+                            modifier = Modifier.size(36.dp)
+                        )
                     }
-                )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "No recent calls",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = bColors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Tap below to start an HD audio or 4K video call",
+                        fontSize = 13.sp,
+                        color = bColors.textSecondary
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { viewModel.navigateTo(com.example.ui.viewmodel.AppScreen.CONTACTS_LIST) },
+                        colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(Icons.Default.Phone, null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Start a Call (कॉल करें)", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                items(calls, key = { it.id }) { call ->
+                    CallItemRow(
+                        call = call,
+                        onCallClick = {
+                            viewModel.startCall(call.contactName, call.contactAvatar, call.isVideo)
+                        },
+                        onDeleteClick = {
+                            viewModel.deleteCall(call.id)
+                        }
+                    )
+                }
             }
         }
+    }
+
+    if (showDirectCallDialog) {
+        AlertDialog(
+            onDismissRequest = { showDirectCallDialog = false },
+            title = {
+                Text("Direct Call / Dial (डायरेक्ट कॉल)", fontWeight = FontWeight.Bold, color = bColors.textPrimary)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Enter contact name or phone number to start an instant call:", fontSize = 13.sp, color = bColors.textSecondary)
+                    OutlinedTextField(
+                        value = directCallNameOrPhone,
+                        onValueChange = { directCallNameOrPhone = it },
+                        placeholder = { Text("e.g. Rahul, +91 9876543210") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            val target = directCallNameOrPhone.ifBlank { "Unknown User" }
+                            showDirectCallDialog = false
+                            viewModel.startCall(target, target.take(2).uppercase(), isVideo = false)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight)
+                    ) {
+                        Icon(Icons.Default.Phone, null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Voice Call")
+                    }
+                    Button(
+                        onClick = {
+                            val target = directCallNameOrPhone.ifBlank { "Unknown User" }
+                            showDirectCallDialog = false
+                            viewModel.startCall(target, target.take(2).uppercase(), isVideo = true)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = BharatElectricCyan)
+                    ) {
+                        Icon(Icons.Default.Videocam, null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Video")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDirectCallDialog = false }) {
+                    Text("Cancel", color = bColors.textSecondary)
+                }
+            },
+            containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated
+        )
     }
 }
 
 @Composable
 fun CallItemRow(
     call: CallEntity,
-    onCallClick: () -> Unit
+    onCallClick: () -> Unit,
+    onDeleteClick: () -> Unit = {}
 ) {
     val bColors = LocalBharatColors.current
 
@@ -299,6 +435,20 @@ fun CallItemRow(
                     contentDescription = "Call",
                     tint = if (call.isVideo) BharatElectricCyan else BharatGreenLight,
                     modifier = Modifier.size(20.dp)
+                )
+            }
+
+            IconButton(
+                onClick = onDeleteClick,
+                modifier = Modifier
+                    .size(36.dp)
+                    .testTag("delete_call_log_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = "Delete Log",
+                    tint = bColors.textMuted,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -539,28 +689,45 @@ fun ActiveCallScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0x990F172A),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.5f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IconButton(
+                        onClick = { viewModel.endCall() },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x990F172A))
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(if (callState.isConnected) BharatGreenLight else BharatSaffron)
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Minimize / Back",
+                            tint = BharatWhite,
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (callState.isConnected) "WebRTC HD • ${callState.webrtcLatencyMs}ms" else "Connecting...",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = BharatWhite
-                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0x990F172A),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (callState.isConnected) BharatGreenLight else BharatSaffron)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (callState.isConnected) "WebRTC HD • ${callState.webrtcLatencyMs}ms" else "Calling...",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BharatWhite
+                            )
+                        }
                     }
                 }
 

@@ -49,6 +49,38 @@ class BharatChatRepository(
 
     suspend fun deleteContact(contactId: String) = contactDao.deleteContactById(contactId)
 
+    suspend fun deleteChat(chatId: String) {
+        messageDao.clearChatMessages(chatId)
+        chatDao.deleteChat(chatId)
+    }
+
+    suspend fun toggleChatPin(chatId: String) {
+        chatDao.toggleChatPin(chatId)
+    }
+
+    suspend fun clearChatMessages(chatId: String) {
+        messageDao.clearChatMessages(chatId)
+        chatDao.updateLastMessage(chatId, "", SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()), System.currentTimeMillis())
+    }
+
+    suspend fun clearAllChats() {
+        messageDao.clearAllMessages()
+        chatDao.clearAllChats()
+    }
+
+    suspend fun clearAllDemoData() {
+        messageDao.clearAllMessages()
+        chatDao.clearAllChats()
+        contactDao.clearAllContacts()
+        callDao.clearAllCalls()
+    }
+
+    suspend fun insertCall(call: CallEntity) = callDao.insertCall(call)
+
+    suspend fun deleteCall(callId: String) = callDao.deleteCall(callId)
+
+    suspend fun clearAllCalls() = callDao.clearAllCalls()
+
     suspend fun getChatById(chatId: String): ChatEntity? = chatDao.getChatById(chatId)
 
     suspend fun sendMessage(
@@ -298,6 +330,9 @@ class BharatChatRepository(
     }
 
     suspend fun seedInitialDataIfEmpty() {
+        if (chatDao.getAllChatsList().isNotEmpty()) {
+            return
+        }
         val now = System.currentTimeMillis()
         val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
 

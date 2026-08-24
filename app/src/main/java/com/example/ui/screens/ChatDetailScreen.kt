@@ -83,6 +83,9 @@ fun ChatDetailScreen(
     val activeZoomableDp by viewModel.activeZoomableDp.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    var showDeleteChatConfirmDialog by remember { mutableStateOf(false) }
+    var showClearHistoryConfirmDialog by remember { mutableStateOf(false) }
+
     val clipboardManager = LocalClipboardManager.current
     val selectedMessages = remember { mutableStateListOf<MessageEntity>() }
     val isSelectionMode by remember { derivedStateOf { selectedMessages.isNotEmpty() } }
@@ -513,6 +516,22 @@ fun ChatDetailScreen(
                                     onClick = {
                                         showMenu = false
                                         viewModel.showWallpaperSheet.value = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🧹 Clear History", color = BharatSaffron) },
+                                    leadingIcon = { Icon(Icons.Outlined.CleaningServices, null, tint = BharatSaffron) },
+                                    onClick = {
+                                        showMenu = false
+                                        showClearHistoryConfirmDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🗑️ Delete Chat", color = Color(0xFFEF4444)) },
+                                    leadingIcon = { Icon(Icons.Default.DeleteForever, null, tint = Color(0xFFEF4444)) },
+                                    onClick = {
+                                        showMenu = false
+                                        showDeleteChatConfirmDialog = true
                                     }
                                 )
                             }
@@ -1240,6 +1259,58 @@ fun ChatDetailScreen(
             purpose = biometricPurpose,
             onSuccess = { viewModel.completeBiometricAuth(true) },
             onDismiss = { viewModel.completeBiometricAuth(false) }
+        )
+    }
+
+    if (showDeleteChatConfirmDialog && activeChat != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteChatConfirmDialog = false },
+            title = { Text("Delete conversation with ${activeChat!!.title}?", fontWeight = FontWeight.Bold, color = bColors.textPrimary) },
+            text = { Text("This chat and all its messages will be permanently deleted from this device.", color = bColors.textSecondary, fontSize = 14.sp) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteChatConfirmDialog = false
+                        viewModel.deleteChat(activeChat!!.id)
+                        android.widget.Toast.makeText(context, "Chat deleted", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                ) {
+                    Text("DELETE", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteChatConfirmDialog = false }) {
+                    Text("CANCEL", color = bColors.textSecondary)
+                }
+            },
+            containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated
+        )
+    }
+
+    if (showClearHistoryConfirmDialog && activeChat != null) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryConfirmDialog = false },
+            title = { Text("Clear chat history?", fontWeight = FontWeight.Bold, color = bColors.textPrimary) },
+            text = { Text("All messages in this chat will be deleted.", color = bColors.textSecondary, fontSize = 14.sp) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearHistoryConfirmDialog = false
+                        viewModel.clearChatHistory(activeChat!!.id)
+                        android.widget.Toast.makeText(context, "History cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BharatSaffron)
+                ) {
+                    Text("CLEAR", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryConfirmDialog = false }) {
+                    Text("CANCEL", color = bColors.textSecondary)
+                }
+            },
+            containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated
         )
     }
 }

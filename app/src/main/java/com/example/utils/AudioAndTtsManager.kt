@@ -1,6 +1,8 @@
 package com.example.utils
 
 import android.content.Context
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
@@ -11,8 +13,15 @@ class AudioAndTtsManager(private val context: Context) {
 
     private var tts: TextToSpeech? = null
     private var isInitialized = false
+    private var toneGenerator: ToneGenerator? = null
 
     init {
+        try {
+            toneGenerator = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 75)
+        } catch (e: Exception) {
+            toneGenerator = null
+        }
+
         try {
             tts = TextToSpeech(context.applicationContext) { status ->
                 if (status == TextToSpeech.SUCCESS) {
@@ -25,6 +34,38 @@ class AudioAndTtsManager(private val context: Context) {
             }
         } catch (e: Exception) {
             isInitialized = false
+        }
+    }
+
+    fun playCallDialTone() {
+        try {
+            toneGenerator?.startTone(ToneGenerator.TONE_SUP_RINGTONE, 1200)
+        } catch (e: Exception) {
+            // Ignore
+        }
+    }
+
+    fun playCallConnectedTone() {
+        try {
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+        } catch (e: Exception) {
+            // Ignore
+        }
+    }
+
+    fun playCallEndTone() {
+        try {
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_PROMPT, 300)
+        } catch (e: Exception) {
+            // Ignore
+        }
+    }
+
+    fun stopCallTones() {
+        try {
+            toneGenerator?.stopTone()
+        } catch (e: Exception) {
+            // Ignore
         }
     }
 
@@ -64,6 +105,8 @@ class AudioAndTtsManager(private val context: Context) {
 
     fun shutdown() {
         try {
+            toneGenerator?.release()
+            toneGenerator = null
             tts?.stop()
             tts?.shutdown()
         } catch (e: Exception) {

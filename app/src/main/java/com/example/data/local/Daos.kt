@@ -36,8 +36,14 @@ interface ChatDao {
     @Query("UPDATE chats SET unreadCount = 0 WHERE id = :chatId")
     suspend fun markChatAsRead(chatId: String)
 
+    @Query("UPDATE chats SET isPinned = CASE WHEN isPinned = 1 THEN 0 ELSE 1 END WHERE id = :chatId")
+    suspend fun toggleChatPin(chatId: String)
+
     @Query("DELETE FROM chats WHERE id = :chatId")
     suspend fun deleteChat(chatId: String)
+
+    @Query("DELETE FROM chats")
+    suspend fun clearAllChats()
 }
 
 @Dao
@@ -101,6 +107,9 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE chatId = :chatId")
     suspend fun clearChatMessages(chatId: String)
+
+    @Query("DELETE FROM messages")
+    suspend fun clearAllMessages()
 }
 
 @Dao

@@ -296,6 +296,20 @@ fun MainHomeScreen(
                         modifier = Modifier.size(24.dp)
                     )
                 }
+            } else if (selectedTab == NavigationTab.CALLS) {
+                FloatingActionButton(
+                    onClick = { viewModel.navigateTo(com.example.ui.viewmodel.AppScreen.CONTACTS_LIST) },
+                    containerColor = BharatGreenLight,
+                    contentColor = BharatWhite,
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.testTag("fab_new_call")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Phone,
+                        contentDescription = "Start New Call",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     ) { innerPadding ->

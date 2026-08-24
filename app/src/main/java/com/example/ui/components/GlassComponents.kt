@@ -2,9 +2,11 @@ package com.example.ui.components
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
@@ -35,6 +38,7 @@ fun GlassCard(
     borderColor: Color? = null,
     elevation: Dp = 4.dp,
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val bColors = LocalBharatColors.current
@@ -43,7 +47,18 @@ fun GlassCard(
 
     Surface(
         modifier = modifier
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+            .then(
+                if (onLongClick != null && onClick != null) {
+                    Modifier.combinedClickable(
+                        onClick = onClick,
+                        onLongClick = onLongClick
+                    )
+                } else if (onClick != null) {
+                    Modifier.clickable { onClick() }
+                } else {
+                    Modifier
+                }
+            ),
         shape = shape,
         color = bg,
         tonalElevation = elevation,

@@ -703,6 +703,42 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun deleteChat(chatId: String) {
+        viewModelScope.launch {
+            repository.deleteChat(chatId)
+            if (_activeChat.value?.id == chatId) {
+                _activeChat.value = null
+                _currentScreen.value = AppScreen.MAIN_APP
+            }
+        }
+    }
+
+    fun toggleChatPin(chatId: String) {
+        viewModelScope.launch {
+            repository.toggleChatPin(chatId)
+        }
+    }
+
+    fun clearChatHistory(chatId: String) {
+        viewModelScope.launch {
+            repository.clearChatMessages(chatId)
+        }
+    }
+
+    fun clearAllChats() {
+        viewModelScope.launch {
+            repository.clearAllChats()
+            _activeChat.value = null
+        }
+    }
+
+    fun clearAllDemoData() {
+        viewModelScope.launch {
+            repository.clearAllDemoData()
+            _activeChat.value = null
+        }
+    }
+
     fun forwardMessages(targetChatIds: List<String>, messages: List<MessageEntity>) {
         viewModelScope.launch {
             targetChatIds.forEach { targetId ->
@@ -812,21 +848,29 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun startCall(contactName: String, contactAvatar: String, isVideo: Boolean) {
+        val safeName = contactName.ifBlank { "Contact" }
+        val safeAvatar = if (contactAvatar.isNotBlank()) contactAvatar else safeName.take(2).uppercase()
+        
         _activeCallState.value = ActiveCallState(
-            contactName = contactName,
-            contactAvatar = contactAvatar,
+            contactName = safeName,
+            contactAvatar = safeAvatar,
             isVideo = isVideo,
             isConnected = false,
             durationSeconds = 0
         )
         _currentScreen.value = AppScreen.ACTIVE_CALL
 
+        // Play dial tone while connecting
+        ttsManager.playCallDialTone()
+
         callTimerJob?.cancel()
         callTimerJob = viewModelScope.launch {
-            delay(1200) // WebRTC ICE candidate & SDP handshake simulation
+            delay(1500) // WebRTC ICE candidate & SDP handshake simulation
+            ttsManager.stopCallTones()
+            ttsManager.playCallConnectedTone()
             _activeCallState.value = _activeCallState.value.copy(
                 isConnected = true,
-                webrtcLatencyMs = 16 + Random().nextInt(12),
+                webrtcLatencyMs = 16 + (0..12).random(),
                 webrtcBitrateKbps = if (isVideo) 2850 else 320
             )
             while (true) {
@@ -868,8 +912,53 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun endCall() {
+        val currentState = _activeCallState.value
         callTimerJob?.cancel()
+        ttsManager.stopCallTones()
+        ttsManager.playCallEndTone()
+
+        // Log call to Call History DB
+        if (currentState.contactName.isNotBlank()) {
+            val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
+            val timeStr = sdf.format(Date())
+            val durationText = if (currentState.isConnected && currentState.durationSeconds > 0) {
+                val m = currentState.durationSeconds / 60
+                val s = currentState.durationSeconds % 60
+                "${m}m ${s}s"
+            } else {
+                "Outgoing"
+            }
+            viewModelScope.launch {
+                repository.insertCall(
+                    CallEntity(
+                        id = java.util.UUID.randomUUID().toString(),
+                        contactName = currentState.contactName,
+                        contactAvatar = currentState.contactAvatar,
+                        isVideo = currentState.isVideo,
+                        isIncoming = false,
+                        isMissed = !currentState.isConnected,
+                        timestamp = System.currentTimeMillis(),
+                        timeFormatted = timeStr,
+                        durationStr = durationText,
+                        qualityStr = if (currentState.isVideo) "4K WebRTC" else "HD Voice"
+                    )
+                )
+            }
+        }
+
         _currentScreen.value = if (_activeChatId.value != null) AppScreen.CHAT_DETAIL else AppScreen.MAIN_APP
+    }
+
+    fun deleteCall(callId: String) {
+        viewModelScope.launch {
+            repository.deleteCall(callId)
+        }
+    }
+
+    fun clearAllCalls() {
+        viewModelScope.launch {
+            repository.clearAllCalls()
+        }
     }
 
     fun askBharatAiTab(prompt: String) {

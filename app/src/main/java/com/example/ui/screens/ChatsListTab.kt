@@ -29,6 +29,7 @@ import com.example.ui.theme.*
 import com.example.ui.viewmodel.BharatChatViewModel
 import com.example.ui.viewmodel.ChatFilter
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatsListTab(
     viewModel: BharatChatViewModel,
@@ -38,6 +39,11 @@ fun ChatsListTab(
     val activeFilter by viewModel.chatFilter.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val bColors = LocalBharatColors.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    var selectedChatForActions by remember { mutableStateOf<ChatEntity?>(null) }
+    var showDeleteConfirmDialog by remember { mutableStateOf<ChatEntity?>(null) }
+    var showClearMessagesConfirmDialog by remember { mutableStateOf<ChatEntity?>(null) }
 
     Column(
         modifier = modifier
@@ -173,15 +179,16 @@ fun ChatsListTab(
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "No conversations found",
-                        color = bColors.textSecondary,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 15.sp
+                        color = bColors.textPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Tap the + button to start a secure chat",
-                        color = bColors.textMuted,
-                        fontSize = 12.sp
+                        text = "All demo names & chats have been removed.\nTap the + button to start a new chat.",
+                        color = bColors.textSecondary,
+                        fontSize = 13.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
             }
@@ -195,11 +202,209 @@ fun ChatsListTab(
                     ChatItemRow(
                         chat = chat,
                         onClick = { viewModel.openChat(chat.id) },
+                        onLongClick = { selectedChatForActions = chat },
                         onAvatarClick = { viewModel.openContactProfileFromChat(chat) }
                     )
                 }
             }
         }
+    }
+
+    // Long-press BottomSheet Options Menu
+    if (selectedChatForActions != null) {
+        val activeSelected = selectedChatForActions!!
+        ModalBottomSheet(
+            onDismissRequest = { selectedChatForActions = null },
+            containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    StatusRingAvatar(
+                        initial = activeSelected.avatarInitial,
+                        avatarColorHex = activeSelected.avatarColorHex,
+                        size = 46.dp,
+                        isAiBot = activeSelected.isAiAssistant
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = activeSelected.title,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = bColors.textPrimary
+                        )
+                        Text(
+                            text = activeSelected.subtitle.ifBlank { "Options" },
+                            fontSize = 13.sp,
+                            color = bColors.textSecondary
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = bColors.glassBorder, thickness = 0.8.dp)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Pin / Unpin
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            if (activeSelected.isPinned) "Unpin Chat (अनपिन करें)" else "Pin to Top (ऊपर पिन करें)",
+                            color = bColors.textPrimary
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = if (activeSelected.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                            contentDescription = null,
+                            tint = BharatSaffron
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        viewModel.toggleChatPin(activeSelected.id)
+                        selectedChatForActions = null
+                    }
+                )
+
+                // View Contact Info
+                ListItem(
+                    headlineContent = { Text("Contact Info (प्रोफ़ाइल देखें)", color = bColors.textPrimary) },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = BharatElectricCyan
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        viewModel.openContactProfileFromChat(activeSelected)
+                        selectedChatForActions = null
+                    }
+                )
+
+                // Clear Messages
+                ListItem(
+                    headlineContent = { Text("Clear Messages (मैसेज साफ करें)", color = bColors.textPrimary) },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Outlined.CleaningServices,
+                            contentDescription = null,
+                            tint = BharatSaffron
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showClearMessagesConfirmDialog = activeSelected
+                        selectedChatForActions = null
+                    }
+                )
+
+                // Delete Chat (Red)
+                ListItem(
+                    headlineContent = {
+                        Text("Delete Chat (चैट हटाएं)", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.DeleteForever,
+                            contentDescription = null,
+                            tint = Color(0xFFEF4444)
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showDeleteConfirmDialog = activeSelected
+                        selectedChatForActions = null
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+
+    // Delete Chat Confirmation Dialog
+    if (showDeleteConfirmDialog != null) {
+        val target = showDeleteConfirmDialog!!
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = null },
+            title = {
+                Text(
+                    text = "Delete Chat with ${target.title}?",
+                    fontWeight = FontWeight.Bold,
+                    color = bColors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "All messages and media with ${target.title} will be permanently removed from this device.",
+                    color = bColors.textSecondary,
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteChat(target.id)
+                        showDeleteConfirmDialog = null
+                        android.widget.Toast.makeText(context, "${target.title} removed", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                ) {
+                    Text("DELETE (हटाएं)", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = null }) {
+                    Text("CANCEL", color = bColors.textSecondary)
+                }
+            },
+            containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated
+        )
+    }
+
+    // Clear Messages Confirmation Dialog
+    if (showClearMessagesConfirmDialog != null) {
+        val target = showClearMessagesConfirmDialog!!
+        AlertDialog(
+            onDismissRequest = { showClearMessagesConfirmDialog = null },
+            title = {
+                Text(
+                    text = "Clear all messages in ${target.title}?",
+                    fontWeight = FontWeight.Bold,
+                    color = bColors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "Messages will be cleared. The conversation will remain in your chat list.",
+                    color = bColors.textSecondary,
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearChatHistory(target.id)
+                        showClearMessagesConfirmDialog = null
+                        android.widget.Toast.makeText(context, "Messages cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BharatSaffron)
+                ) {
+                    Text("CLEAR", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearMessagesConfirmDialog = null }) {
+                    Text("CANCEL", color = bColors.textSecondary)
+                }
+            },
+            containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated
+        )
     }
 }
 
@@ -207,6 +412,7 @@ fun ChatsListTab(
 fun ChatItemRow(
     chat: ChatEntity,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     onAvatarClick: () -> Unit = onClick
 ) {
     val bColors = LocalBharatColors.current
@@ -217,7 +423,8 @@ fun ChatItemRow(
             .testTag("chat_item_${chat.id}"),
         shape = RoundedCornerShape(16.dp),
         elevation = 0.dp,
-        onClick = onClick
+        onClick = onClick,
+        onLongClick = onLongClick
     ) {
         Row(
             modifier = Modifier

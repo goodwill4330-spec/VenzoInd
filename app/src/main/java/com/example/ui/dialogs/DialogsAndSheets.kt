@@ -3242,6 +3242,20 @@ fun ContactProfileDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Zoom Profile Picture (DP)", fontWeight = FontWeight.Bold, color = BharatWhite, fontSize = 13.sp)
                 }
+
+                // Delete Contact & Chat Button
+                TextButton(
+                    onClick = {
+                        viewModel.deleteContact(contact.id)
+                        viewModel.deleteChat(contact.id)
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFEF4444))
+                ) {
+                    Icon(Icons.Default.DeleteOutline, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Delete Contact & Chat (हटाएं)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
             }
         }
     }

@@ -90,6 +90,7 @@ fun WhatsAppSettingsScreen(
     var showLastSeenDialog by remember { mutableStateOf(false) }
     var showLanguageSheet by remember { mutableStateOf(false) }
     var showClearChatsDialog by remember { mutableStateOf(false) }
+    var showClearAllDemoDialog by remember { mutableStateOf(false) }
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
     var showTwoStepDialog by remember { mutableStateOf(false) }
     var twoStepPinInput by remember { mutableStateOf("") }
@@ -247,7 +248,8 @@ fun WhatsAppSettingsScreen(
                             fontSize = selectedFontSize,
                             onThemeClick = { showThemeDialog = true },
                             onBackupClick = { viewModel.showBackupRestoreDialog.value = true },
-                            onClearChatsClick = { showClearChatsDialog = true }
+                            onClearChatsClick = { showClearChatsDialog = true },
+                            onClearDemoDataClick = { showClearAllDemoDialog = true }
                         )
                     }
 
@@ -502,7 +504,7 @@ fun WhatsAppSettingsScreen(
                 title = { Text("Clear all chats?", fontWeight = FontWeight.Bold, color = bColors.textPrimary) },
                 text = {
                     Text(
-                        "Messages will be deleted from this device. Starred messages will be kept unless explicitly deleted.",
+                        "All messages and conversation histories will be permanently deleted from this device.",
                         color = bColors.textSecondary,
                         fontSize = 14.sp
                     )
@@ -511,7 +513,8 @@ fun WhatsAppSettingsScreen(
                     TextButton(
                         onClick = {
                             showClearChatsDialog = false
-                            Toast.makeText(context, "All chat histories cleared", Toast.LENGTH_SHORT).show()
+                            viewModel.clearAllChats()
+                            Toast.makeText(context, "All chats & messages deleted", Toast.LENGTH_SHORT).show()
                         }
                     ) {
                         Text("CLEAR CHATS", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
@@ -519,6 +522,38 @@ fun WhatsAppSettingsScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showClearChatsDialog = false }) {
+                        Text("CANCEL", color = bColors.textSecondary)
+                    }
+                },
+                containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurface
+            )
+        }
+
+        if (showClearAllDemoDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearAllDemoDialog = false },
+                title = { Text("Remove Demo Names & Data?", fontWeight = FontWeight.Bold, color = Color(0xFFEF4444)) },
+                text = {
+                    Text(
+                        "This will remove all demo contacts (Vikram, Ananya, ISRO, Dr. Priya, Techies, etc.) and conversations from your app.",
+                        color = bColors.textSecondary,
+                        fontSize = 14.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showClearAllDemoDialog = false
+                            viewModel.clearAllDemoData()
+                            Toast.makeText(context, "All demo data removed successfully!", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                    ) {
+                        Text("REMOVE DEMO DATA", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearAllDemoDialog = false }) {
                         Text("CANCEL", color = bColors.textSecondary)
                     }
                 },
@@ -1147,7 +1182,8 @@ private fun ChatsSettingsContent(
     fontSize: String,
     onThemeClick: () -> Unit,
     onBackupClick: () -> Unit,
-    onClearChatsClick: () -> Unit
+    onClearChatsClick: () -> Unit,
+    onClearDemoDataClick: () -> Unit
 ) {
     val context = LocalContext.current
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -1251,6 +1287,13 @@ private fun ChatsSettingsContent(
                 title = "Chat history",
                 subtitle = "Export chat, clear all chats, delete all chats",
                 onClick = onClearChatsClick,
+                bColors = bColors
+            )
+            WhatsAppSettingRow(
+                icon = Icons.Outlined.DeleteSweep,
+                title = "Remove demo names & contacts",
+                subtitle = "Delete all sample contacts, chats, and calls",
+                onClick = onClearDemoDataClick,
                 bColors = bColors
             )
         }

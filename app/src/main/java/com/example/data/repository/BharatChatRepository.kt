@@ -350,7 +350,263 @@ class BharatChatRepository(
     }
 
     suspend fun seedInitialDataIfEmpty() {
-        cleanLegacyDemoData()
+        try {
+            if (contactDao.getContactsCount() == 0) {
+                val now = System.currentTimeMillis()
+                val initialContacts = listOf(
+                    ContactEntity(
+                        id = "contact_aarav_sharma",
+                        name = "Aarav Sharma",
+                        phone = "+91 98201 12345",
+                        upiVpa = "aarav.sharma@okhdfcbank",
+                        avatarInitial = "AS",
+                        avatarColorHex = "#0284C7",
+                        statusMsg = "Coding next-gen apps with Gemini AI 🚀",
+                        isBharatChatUser = true,
+                        isFavorite = true,
+                        publicKeyFingerprint = "KYBER-1024-AS789A",
+                        lastSeenTimestamp = now - 60_000L // 1m ago (Online)
+                    ),
+                    ContactEntity(
+                        id = "contact_aditi_rao",
+                        name = "Aditi Rao",
+                        phone = "+91 98450 23456",
+                        upiVpa = "aditirao@upi",
+                        avatarInitial = "AR",
+                        avatarColorHex = "#EC4899",
+                        statusMsg = "Designing sovereign Indian UI systems 🎨",
+                        isBharatChatUser = true,
+                        isFavorite = true,
+                        publicKeyFingerprint = "KYBER-1024-AR432B",
+                        lastSeenTimestamp = now - 120_000L // 2m ago (Online)
+                    ),
+                    ContactEntity(
+                        id = "contact_bhavna_patel",
+                        name = "Bhavna Patel",
+                        phone = "+91 97123 34567",
+                        upiVpa = "bhavna.patel@icici",
+                        avatarInitial = "BP",
+                        avatarColorHex = "#10B981",
+                        statusMsg = "In a meeting. Urgent calls only 📵",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-BP910C",
+                        lastSeenTimestamp = now - 900_000L // 15m ago
+                    ),
+                    ContactEntity(
+                        id = "contact_chirag_verma",
+                        name = "Chirag Verma",
+                        phone = "+91 99887 45678",
+                        upiVpa = "chiragverma@axl",
+                        avatarInitial = "CV",
+                        avatarColorHex = "#8B5CF6",
+                        statusMsg = "Available on VenzoInd 🇮🇳",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-CV234D",
+                        lastSeenTimestamp = now - 1800_000L // 30m ago
+                    ),
+                    ContactEntity(
+                        id = "contact_devendra_nair",
+                        name = "Devendra Nair",
+                        phone = "+91 94470 56789",
+                        upiVpa = "dev.nair@sbi",
+                        avatarInitial = "DN",
+                        avatarColorHex = "#F59E0B",
+                        statusMsg = "Coffee & Coroutines ☕",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-DN567E",
+                        lastSeenTimestamp = now - 3600_000L // 1h ago
+                    ),
+                    ContactEntity(
+                        id = "contact_esha_deol",
+                        name = "Esha Deol",
+                        phone = "+91 98112 67890",
+                        upiVpa = "eshadeol@paytm",
+                        avatarInitial = "ED",
+                        avatarColorHex = "#EF4444",
+                        statusMsg = "Exploring Bangalore Tech Park 🌿",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-ED890F",
+                        lastSeenTimestamp = now - 7200_000L // 2h ago
+                    ),
+                    ContactEntity(
+                        id = "contact_farhan_akhtar",
+                        name = "Farhan Akhtar",
+                        phone = "+91 98210 78901",
+                        upiVpa = "farhan@ybl",
+                        avatarInitial = "FA",
+                        avatarColorHex = "#14B8A6",
+                        statusMsg = "Live life with passion and purpose ✨",
+                        isBharatChatUser = true,
+                        isFavorite = true,
+                        publicKeyFingerprint = "KYBER-1024-FA123G",
+                        lastSeenTimestamp = now - 60_000L // Online
+                    ),
+                    ContactEntity(
+                        id = "contact_gaurav_sen",
+                        name = "Gaurav Sen",
+                        phone = "+91 98300 89012",
+                        upiVpa = "gauravsen@hdfcbank",
+                        avatarInitial = "GS",
+                        avatarColorHex = "#6366F1",
+                        statusMsg = "System Design & Distributed Scalability ⚡",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-GS456H",
+                        lastSeenTimestamp = now - 14400_000L // 4h ago
+                    ),
+                    ContactEntity(
+                        id = "contact_harshita_joshi",
+                        name = "Harshita Joshi",
+                        phone = "+91 98910 90123",
+                        upiVpa = "harshita.joshi@upi",
+                        avatarInitial = "HJ",
+                        avatarColorHex = "#D946EF",
+                        statusMsg = "Working from mountains 🏔️",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-HJ789I",
+                        lastSeenTimestamp = now - 86400_000L // Yesterday
+                    ),
+                    ContactEntity(
+                        id = "contact_ishaan_khatter",
+                        name = "Ishaan Khatter",
+                        phone = "+91 98765 01234",
+                        upiVpa = "ishaan@okaxis",
+                        avatarInitial = "IK",
+                        avatarColorHex = "#0EA5E9",
+                        statusMsg = "Fitness first 💪 Every rep counts",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-IK012J",
+                        lastSeenTimestamp = now - 120_000L // Online
+                    ),
+                    ContactEntity(
+                        id = "contact_kavita_krishnan",
+                        name = "Kavita Krishnan",
+                        phone = "+91 94440 12345",
+                        upiVpa = "kavita.k@kotak",
+                        avatarInitial = "KK",
+                        avatarColorHex = "#F97316",
+                        statusMsg = "Building secure P2P systems 🛡️",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-KK345K",
+                        lastSeenTimestamp = now - 43200_000L // 12h ago
+                    ),
+                    ContactEntity(
+                        id = "contact_lakshya_sen",
+                        name = "Lakshya Sen",
+                        phone = "+91 97410 23456",
+                        upiVpa = "lakshya.sen@upi",
+                        avatarInitial = "LS",
+                        avatarColorHex = "#22C55E",
+                        statusMsg = "Focus on the game 🏸",
+                        isBharatChatUser = true,
+                        isFavorite = true,
+                        publicKeyFingerprint = "KYBER-1024-LS678L",
+                        lastSeenTimestamp = now - 60_000L // Online
+                    ),
+                    ContactEntity(
+                        id = "contact_meera_nambiar",
+                        name = "Meera Nambiar",
+                        phone = "+91 98840 34567",
+                        upiVpa = "meera.n@okhdfcbank",
+                        avatarInitial = "MN",
+                        avatarColorHex = "#A855F7",
+                        statusMsg = "Reading sci-fi & deep learning papers 📚",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-MN901M",
+                        lastSeenTimestamp = now - 18000_000L // 5h ago
+                    ),
+                    ContactEntity(
+                        id = "contact_neha_gupta",
+                        name = "Neha Gupta",
+                        phone = "+91 98100 45678",
+                        upiVpa = "neha.gupta@paytm",
+                        avatarInitial = "NG",
+                        avatarColorHex = "#06B6D4",
+                        statusMsg = "VenzoInd Early Adopter 🇮🇳",
+                        isBharatChatUser = true,
+                        isFavorite = true,
+                        publicKeyFingerprint = "KYBER-1024-NG234N",
+                        lastSeenTimestamp = now - 60_000L // Online
+                    ),
+                    ContactEntity(
+                        id = "contact_priya_sharma",
+                        name = "Priya Sharma",
+                        phone = "+91 98200 56789",
+                        upiVpa = "priyasharma@icici",
+                        avatarInitial = "PS",
+                        avatarColorHex = "#EC4899",
+                        statusMsg = "Always curious, forever learning 💡",
+                        isBharatChatUser = true,
+                        isFavorite = true,
+                        publicKeyFingerprint = "KYBER-1024-PS567O",
+                        lastSeenTimestamp = now - 60_000L // Online
+                    ),
+                    ContactEntity(
+                        id = "contact_rohan_mehta",
+                        name = "Rohan Mehta",
+                        phone = "+91 99200 67890",
+                        upiVpa = "rohan.mehta@axisbank",
+                        avatarInitial = "RM",
+                        avatarColorHex = "#3B82F6",
+                        statusMsg = "At Starbucks Indiranagar ☕",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-RM890P",
+                        lastSeenTimestamp = now - 120_000L // Online
+                    ),
+                    ContactEntity(
+                        id = "contact_tanvi_shah",
+                        name = "Tanvi Shah",
+                        phone = "+91 98790 78901",
+                        upiVpa = "tanvi.shah@upi",
+                        avatarInitial = "TS",
+                        avatarColorHex = "#E11D48",
+                        statusMsg = "Creating music & sonic vibes 🎧",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-TS123Q",
+                        lastSeenTimestamp = now - 28800_000L // 8h ago
+                    ),
+                    ContactEntity(
+                        id = "contact_vikram_malhotra",
+                        name = "Vikram Malhotra",
+                        phone = "+91 98220 89012",
+                        upiVpa = "vikram.m@okhdfcbank",
+                        avatarInitial = "VM",
+                        avatarColorHex = "#10B981",
+                        statusMsg = "Leading sovereign tech initiatives 🇮🇳",
+                        isBharatChatUser = true,
+                        isFavorite = true,
+                        publicKeyFingerprint = "KYBER-1024-VM456R",
+                        lastSeenTimestamp = now - 60_000L // Online
+                    ),
+                    ContactEntity(
+                        id = "contact_zara_khan",
+                        name = "Zara Khan",
+                        phone = "+91 98205 90123",
+                        upiVpa = "zarakhan@ybl",
+                        avatarInitial = "ZK",
+                        avatarColorHex = "#8B5CF6",
+                        statusMsg = "Architecting cloud native apps ☁️",
+                        isBharatChatUser = true,
+                        isFavorite = false,
+                        publicKeyFingerprint = "KYBER-1024-ZK789S",
+                        lastSeenTimestamp = now - 3600_000L // 1h ago
+                    )
+                )
+                contactDao.insertContacts(initialContacts)
+            }
+        } catch (e: Exception) {
+            // Ignore seeding errors
+        }
     }
 
     suspend fun cleanLegacyDemoData() {

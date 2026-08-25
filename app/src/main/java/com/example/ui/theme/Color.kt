@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 // =======================================================================
-// BHARAT CHAT: CYBER-GREEN & TRICOLOR COLOR PALETTE
+// VENZOIND: CYBER-GREEN & TRICOLOR COLOR PALETTE
 // =======================================================================
 
 // --- Cyber-Green Core Tokens ---

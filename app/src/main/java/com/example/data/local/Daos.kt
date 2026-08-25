@@ -213,6 +213,9 @@ interface ContactDao {
     @Query("DELETE FROM contacts WHERE id = :contactId")
     suspend fun deleteContactById(contactId: String)
 
+    @Query("SELECT COUNT(*) FROM contacts")
+    suspend fun getContactsCount(): Int
+
     @Query("DELETE FROM contacts")
     suspend fun clearAllContacts()
 }

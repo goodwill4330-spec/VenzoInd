@@ -67,6 +67,15 @@ class FirestoreManager private constructor(private val context: Context) {
 
             if (app != null) {
                 firestoreInstance = FirebaseFirestore.getInstance(app)
+                try {
+                    val settings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
+                        .setPersistenceEnabled(true)
+                        .build()
+                    firestoreInstance?.firestoreSettings = settings
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not apply custom firestore settings: ${e.message}")
+                }
+
                 _isFirestoreConnected.value = true
                 Log.d(TAG, "Firebase Firestore initialized successfully for venzo-chat-app.")
             }
@@ -267,8 +276,18 @@ class FirestoreManager private constructor(private val context: Context) {
 
                                 if (!isTargetedToMe) continue
 
-                                // Target local chat ID for this sender
-                                val safeChatId = if (senderDeviceId.isNotBlank()) "chat_${senderDeviceId}" else "chat_${senderName.lowercase().trim().replace(" ", "_")}"
+                                // Find existing matching chat or create new one
+                                val allLocalChats = appDatabase.chatDao().getAllChatsList()
+                                val incomingChatId = doc.getString("chatId") ?: ""
+                                val matchedChat = allLocalChats.firstOrNull { c ->
+                                    c.id == "chat_$senderDeviceId" ||
+                                    (senderDeviceId.isNotBlank() && c.id.contains(senderDeviceId)) ||
+                                    (incomingChatId.isNotBlank() && c.id == incomingChatId) ||
+                                    c.title.equals(senderName, ignoreCase = true) ||
+                                    c.id.equals("chat_${senderName.lowercase().trim().replace(" ", "_")}", ignoreCase = true)
+                                }
+
+                                val safeChatId = matchedChat?.id ?: (if (senderDeviceId.isNotBlank()) "chat_${senderDeviceId}" else "chat_${senderName.lowercase().trim().replace(" ", "_")}")
                                 val contactId = if (senderDeviceId.isNotBlank()) "contact_${senderDeviceId}" else "contact_${senderName.lowercase().replace(" ", "_")}"
 
                                 // Check if message already exists locally

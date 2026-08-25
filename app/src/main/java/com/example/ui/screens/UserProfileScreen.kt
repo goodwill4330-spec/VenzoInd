@@ -515,10 +515,10 @@ fun UserProfileScreen(
 
                             Spacer(modifier = Modifier.height(14.dp))
 
-                            // Quick Action Buttons: Camera & Gallery
+                            // Quick Action Buttons: Camera, Gallery & Zoom DP
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedButton(
                                     onClick = onCameraAction,
@@ -536,13 +536,13 @@ fun UserProfileScreen(
                                         imageVector = Icons.Default.PhotoCamera,
                                         contentDescription = null,
                                         tint = BharatSaffron,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(15.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = "Camera",
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 12.5.sp,
+                                        fontSize = 11.5.sp,
                                         color = BharatSaffron
                                     )
                                 }
@@ -563,14 +563,49 @@ fun UserProfileScreen(
                                         imageVector = Icons.Default.PhotoLibrary,
                                         contentDescription = null,
                                         tint = BharatElectricCyan,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(15.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = "Gallery",
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 12.5.sp,
+                                        fontSize = 11.5.sp,
                                         color = BharatElectricCyan
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel?.openZoomableDp(
+                                            title = if (displayName.isNotBlank()) displayName else "My Profile DP",
+                                            imageUri = profilePicUri.ifBlank { null },
+                                            initial = avatarInitial,
+                                            colorHex = selectedColorHex,
+                                            subtitle = if (statusBio.isNotBlank()) statusBio else "VenzoInd Profile"
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, BharatGreenLight.copy(alpha = 0.6f)),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = BharatGreenLight.copy(alpha = 0.08f)
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp)
+                                        .testTag("avatar_quick_zoom_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ZoomIn,
+                                        contentDescription = null,
+                                        tint = BharatGreenLight,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Zoom DP",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.5.sp,
+                                        color = BharatGreenLight
                                     )
                                 }
                             }
@@ -1452,6 +1487,20 @@ fun UserProfileScreen(
                 selectedAvatarIndex = -1
                 Toast.makeText(context, "Profile picture updated from Camera", Toast.LENGTH_SHORT).show()
             }
+        )
+    }
+
+    val showZoomDp = viewModel?.showZoomableDpDialog?.collectAsState()?.value ?: false
+    val zoomDpData = viewModel?.activeZoomableDp?.collectAsState()?.value
+
+    if (showZoomDp && zoomDpData != null) {
+        com.example.ui.components.ZoomableProfilePicDialog(
+            title = zoomDpData.title,
+            imageUri = zoomDpData.imageUri,
+            avatarInitial = zoomDpData.initial,
+            avatarColorHex = zoomDpData.colorHex,
+            subtitle = zoomDpData.subtitle,
+            onDismiss = { viewModel?.closeZoomableDp() }
         )
     }
 }

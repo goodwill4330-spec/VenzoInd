@@ -88,7 +88,7 @@ class LocalBackupManager(
             val contacts = contactDao.getAllContactsList()
 
             val rootJson = JSONObject()
-            rootJson.put("app", "Venzora Bharat Chat")
+            rootJson.put("app", "VenzoInd")
             rootJson.put("version", "2.0")
             rootJson.put("exportTimestamp", System.currentTimeMillis())
             rootJson.put("exportDate", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
@@ -244,7 +244,7 @@ class LocalBackupManager(
         try {
             val rootJson = JSONObject(jsonString)
             val backupDateStr = rootJson.optString("exportDate", "Unknown Date")
-            val appVersion = rootJson.optString("app", "Venzora Bharat Chat")
+            val appVersion = rootJson.optString("app", "VenzoInd")
 
             // Restore Contacts
             val contactsList = mutableListOf<ContactEntity>()
@@ -260,7 +260,7 @@ class LocalBackupManager(
                             upiVpa = obj.optString("upiVpa", ""),
                             avatarInitial = obj.optString("avatarInitial", "U"),
                             avatarColorHex = obj.optString("avatarColorHex", "#0284C7"),
-                            statusMsg = obj.optString("statusMsg", "Available on Bharat Chat"),
+                            statusMsg = obj.optString("statusMsg", "Available on VenzoInd 🇮🇳"),
                             isBharatChatUser = obj.optBoolean("isBharatChatUser", true),
                             isFavorite = obj.optBoolean("isFavorite", false),
                             isBlocked = obj.optBoolean("isBlocked", false),

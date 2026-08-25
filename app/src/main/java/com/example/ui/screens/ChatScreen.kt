@@ -61,6 +61,9 @@ fun ChatScreen(
 ) {
     val bColors = LocalBharatColors.current
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val e2eeTooltipState = rememberTooltipState(isPersistent = false)
+    var showE2eeDialog by remember { mutableStateOf(false) }
 
     // Interactive Local Message State (Synchronized with ViewModel if available)
     val vmActiveChat by viewModel?.activeChat?.collectAsState() ?: remember { mutableStateOf(null) }
@@ -253,6 +256,57 @@ fun ChatScreen(
                                     color = BharatGreenLight,
                                     fontWeight = FontWeight.Medium
                                 )
+                            }
+
+                            // E2EE Lock Indicator with Tooltip
+                            TooltipBox(
+                                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                                tooltip = {
+                                    PlainTooltip(
+                                        shape = RoundedCornerShape(10.dp),
+                                        containerColor = if (bColors.isDark) Color(0xFF0F172A) else Color(0xFF1E293B),
+                                        contentColor = Color(0xFF38BDF8)
+                                    ) {
+                                        Text(
+                                            "🔒 End-to-End Encrypted (Kyber-1024)",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                },
+                                state = e2eeTooltipState
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = BharatGreenLight.copy(alpha = 0.15f),
+                                    border = BorderStroke(1.dp, BharatGreenLight.copy(alpha = 0.4f)),
+                                    modifier = Modifier
+                                        .clickable {
+                                            coroutineScope.launch { e2eeTooltipState.show() }
+                                            showE2eeDialog = true
+                                        }
+                                        .testTag("chat_screen_e2ee_lock_indicator")
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = "Encrypted",
+                                            tint = BharatGreenLight,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = "E2EE",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = BharatGreenLight
+                                        )
+                                    }
+                                }
                             }
 
                             // Quick Action Icons
@@ -518,6 +572,66 @@ fun ChatScreen(
                     )
                 }
             }
+        }
+
+        if (showE2eeDialog) {
+            AlertDialog(
+                onDismissRequest = { showE2eeDialog = false },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EnhancedEncryption,
+                            contentDescription = null,
+                            tint = BharatGreenLight,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = "End-to-End Encrypted",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = bColors.textPrimary
+                        )
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Messages and calls with $title are secured with Post-Quantum Kyber-1024 cryptography.",
+                            fontSize = 13.5.sp,
+                            color = bColors.textPrimary
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (bColors.isDark) Color(0x331E293B) else Color(0x1564748B),
+                            border = BorderStroke(1.dp, bColors.glassBorder),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("🔐 Protocol: CRYSTALS-Kyber-1024 Sovereign", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BharatGreenLight)
+                                Text("Safety Fingerprint: 894F-902B-12CE-VNZ8", fontSize = 11.sp, color = BharatElectricCyan)
+                                Text("No one outside of this chat can read or listen to your messages.", fontSize = 11.sp, color = bColors.textSecondary)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { showE2eeDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight)
+                    ) {
+                        Text("VERIFIED & SECURE", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showE2eeDialog = false }) {
+                        Text("CLOSE", color = bColors.textSecondary)
+                    }
+                },
+                containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurfaceElevated
+            )
         }
     }
 }

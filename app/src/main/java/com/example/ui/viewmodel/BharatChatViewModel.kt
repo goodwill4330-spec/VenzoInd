@@ -325,7 +325,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         name: String,
         phone: String,
         upiVpa: String = "",
-        statusMsg: String = "Available on Bharat Chat"
+        statusMsg: String = "Available on VenzoInd 🇮🇳"
     ) {
         viewModelScope.launch {
             val initials = name.trim().split(" ")
@@ -341,10 +341,10 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 id = "contact_${UUID.randomUUID()}",
                 name = name.trim(),
                 phone = phone.trim(),
-                upiVpa = if (upiVpa.isBlank()) "${name.lowercase().replace(" ", "")}@upi" else upiVpa.trim(),
+                upiVpa = if (upiVpa.isBlank()) "${name.lowercase().replace(" ", "")}@venzo" else upiVpa.trim(),
                 avatarInitial = initials,
                 avatarColorHex = randomColor,
-                statusMsg = statusMsg.ifBlank { "Available on Bharat Chat" },
+                statusMsg = statusMsg.ifBlank { "Available on VenzoInd 🇮🇳" },
                 isBharatChatUser = true,
                 isFavorite = false,
                 publicKeyFingerprint = "KYBER-1024-${UUID.randomUUID().toString().take(6).uppercase()}",
@@ -483,7 +483,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
             NearbyUser("n1", "Rohan Mehta", 45, "RM", "At Starbucks Indiranagar ☕", false),
             NearbyUser("n2", "Pooja Reddy", 120, "PR", "Working on AI Models 💻", true),
             NearbyUser("n3", "Karan Singh", 280, "KS", "Exploring Bangalore Tech Park 🚀", false),
-            NearbyUser("n4", "Neha Gupta", 450, "NG", "Bharat Chat Early Adopter 🇮🇳", true)
+            NearbyUser("n4", "Neha Gupta", 450, "NG", "VenzoInd Early Adopter 🇮🇳", true)
         )
     )
 
@@ -622,7 +622,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 isOtherUserTyping.value = false
 
                 val replyText = when {
-                    text.contains("hello", ignoreCase = true) || text.contains("hi", ignoreCase = true) -> "Namaste! Received your message on Bharat Chat. 🇮🇳 How are you?"
+                    text.contains("hello", ignoreCase = true) || text.contains("hi", ignoreCase = true) -> "Namaste! Received your message on VenzoInd. 🇮🇳 How are you?"
                     text.contains("upi", ignoreCase = true) || text.contains("pay", ignoreCase = true) -> "Got the UPI update! Thanks for the instant settlement via Bharat Pay. ⚡"
                     text.contains("call", ignoreCase = true) -> "Sure, let's connect on Bharat 4K Encrypted Video call in 5 mins! 📞"
                     text.contains("meeting", ignoreCase = true) -> "Yes, scheduled! Sharing the Bharat Cloud doc link shortly. 🚀"
@@ -1119,7 +1119,13 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun toggleVideo() {
-        _activeCallState.value = _activeCallState.value.copy(isVideoOff = !_activeCallState.value.isVideoOff)
+        val current = _activeCallState.value
+        if (!current.isVideo) {
+            // Upgrade audio call to video call and turn on camera
+            _activeCallState.value = current.copy(isVideo = true, isVideoOff = false)
+        } else {
+            _activeCallState.value = current.copy(isVideoOff = !current.isVideoOff)
+        }
     }
 
     fun toggleSpeaker() {
@@ -1134,7 +1140,8 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun toggleScreenShare() {
-        _activeCallState.value = _activeCallState.value.copy(isScreenSharing = !_activeCallState.value.isScreenSharing)
+        val newSharing = !_activeCallState.value.isScreenSharing
+        _activeCallState.value = _activeCallState.value.copy(isScreenSharing = newSharing)
     }
 
     fun toggleNoiseCanceling() {

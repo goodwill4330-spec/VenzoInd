@@ -30,6 +30,7 @@ import androidx.compose.ui.zIndex
 import com.example.data.model.CallEntity
 import com.example.ui.components.GlassCard
 import com.example.ui.components.LiveCameraVideoPreview
+import com.example.ui.components.LiveScreenShareWorkspace
 import com.example.ui.components.QuantumShieldBadge
 import com.example.ui.components.StatusRingAvatar
 import com.example.ui.theme.*
@@ -489,137 +490,515 @@ fun ActiveCallScreen(
     val timerStr = "${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}"
 
     var showStatsOverlay by remember { mutableStateOf(true) }
+    var isCameraFullScreen by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF030712))
     ) {
-        if (callState.isVideo && !callState.isVideoOff) {
-            // Main Remote Video Stream Canvas (Simulated 4K / 1080p WebRTC stream)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0xFF0B192C),
-                                Color(0xFF0F172A),
-                                Color(0xFF020617)
-                            )
-                        )
-                    )
-            ) {
-                // Video simulation pattern / grid
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(130.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(BharatSaffron, BharatElectricCyan, BharatGreenLight)
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = callState.contactAvatar,
-                            fontSize = 44.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = BharatWhite
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = callState.contactName,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = BharatWhite
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(BharatGreenLight)
-                        )
-                        Text(
-                            text = if (callState.isScreenSharing) "Live Screen Share Active (WebRTC)" else "WebRTC P2P Ultra-HD Stream Active",
-                            fontSize = 12.sp,
-                            color = BharatElectricCyan,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                // PiP (Picture-in-Picture) Local Camera Preview
-                GlassCard(
+        if (callState.isScreenSharing) {
+            // --- SCREEN SHARING ACTIVE MODE (WebRTC Stream + Interactive Workspace) ---
+            if (callState.isVideo && !callState.isVideoOff && isCameraFullScreen) {
+                // User expanded Camera to full screen during screen sharing
+                Box(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .statusBarsPadding()
-                        .padding(top = 60.dp, end = 16.dp)
-                        .size(width = 110.dp, height = 150.dp)
-                        .testTag("pip_camera_preview"),
-                    shape = RoundedCornerShape(18.dp),
-                    backgroundColor = Color(0xCC0F172A),
-                    borderColor = BharatElectricCyan.copy(alpha = 0.6f)
+                        .fillMaxSize()
+                        .clickable { isCameraFullScreen = false }
+                        .testTag("screenshare_fullscreen_camera_view")
                 ) {
-                    Box(
+                    LiveCameraVideoPreview(
+                        isFrontCamera = callState.isFrontCamera,
                         modifier = Modifier.fillMaxSize()
-                    ) {
-                        // Real hardware camera preview feed
-                        LiveCameraVideoPreview(
-                            isFrontCamera = callState.isFrontCamera,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                    )
 
-                        // Camera flip mini badge button
+                    // Top Badge: Camera Info & Full-Screen Indicator
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .statusBarsPadding()
+                            .padding(top = 16.dp, start = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xCC0F172A),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.6f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(BharatGreenLight)
+                                )
+                                Text(
+                                    text = if (callState.isFrontCamera) "Self: Front Camera (Tap to minimize)" else "Self: Back Camera (Tap to minimize)",
+                                    fontSize = 11.5.sp,
+                                    color = BharatWhite,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    // Floating minimize & flip button bar at top-right
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(top = 16.dp, end = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         IconButton(
                             onClick = { viewModel.flipCamera() },
                             modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(4.dp)
-                                .size(28.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xAA000000))
-                                .testTag("flip_camera_pip_button")
+                                .background(Color(0xCC0F172A))
+                                .testTag("screenshare_flip_camera_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.FlipCameraAndroid,
                                 contentDescription = "Flip Camera",
-                                tint = BharatWhite,
-                                modifier = Modifier.size(16.dp)
+                                tint = BharatElectricCyan,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
 
-                        // Camera badge indicator
-                        Surface(
+                        IconButton(
+                            onClick = { isCameraFullScreen = false },
                             modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(4.dp),
-                            shape = RoundedCornerShape(6.dp),
-                            color = Color(0x99000000)
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xCC0F172A))
+                                .testTag("screenshare_minimize_camera_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FullscreenExit,
+                                contentDescription = "Minimize Camera",
+                                tint = BharatWhite,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    // Floating Mini PiP Card for Screen Share return
+                    GlassCard(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(bottom = 160.dp, end = 16.dp)
+                            .size(width = 120.dp, height = 90.dp)
+                            .clickable { isCameraFullScreen = false }
+                            .testTag("pip_screenshare_return_view"),
+                        shape = RoundedCornerShape(14.dp),
+                        backgroundColor = Color(0xDD0F172A),
+                        borderColor = BharatElectricCyan.copy(alpha = 0.8f)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(6.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ScreenShare,
+                                contentDescription = null,
+                                tint = BharatElectricCyan,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Screen Share",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BharatWhite
+                            )
+                            Text(
+                                text = "Tap to expand",
+                                fontSize = 8.5.sp,
+                                color = BharatElectricCyan
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Live Screen Share Workspace View
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LiveScreenShareWorkspace(
+                        contactName = callState.contactName,
+                        onStopSharing = { viewModel.toggleScreenShare() },
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // If camera is enabled, show floating Camera PiP overlay over Screen Share
+                    if (callState.isVideo && !callState.isVideoOff) {
+                        GlassCard(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .statusBarsPadding()
+                                .padding(top = 100.dp, end = 16.dp)
+                                .size(width = 110.dp, height = 150.dp)
+                                .clickable { isCameraFullScreen = true }
+                                .testTag("screenshare_camera_pip_preview"),
+                            shape = RoundedCornerShape(16.dp),
+                            backgroundColor = Color(0xDD0F172A),
+                            borderColor = BharatElectricCyan.copy(alpha = 0.9f)
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                LiveCameraVideoPreview(
+                                    isFrontCamera = callState.isFrontCamera,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+
+                                Surface(
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .padding(4.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xAA000000)
+                                ) {
+                                    Text(
+                                        text = if (callState.isFrontCamera) "Front • Tap Full" else "Back • Tap Full",
+                                        fontSize = 8.5.sp,
+                                        color = BharatElectricCyan,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { isCameraFullScreen = true },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(2.dp)
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0x88000000))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Fullscreen,
+                                        contentDescription = "Full Screen Camera",
+                                        tint = BharatWhite,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { viewModel.flipCamera() },
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(4.dp)
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xCC000000))
+                                        .testTag("screenshare_flip_pip_camera_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FlipCameraAndroid,
+                                        contentDescription = "Flip Camera",
+                                        tint = BharatWhite,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (callState.isVideo && !callState.isVideoOff) {
+            if (isCameraFullScreen) {
+                // --- FULL SCREEN CAMERA VIEW ---
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable { isCameraFullScreen = false }
+                        .testTag("fullscreen_camera_view")
+                ) {
+                    // Live Hardware Camera Stream in Full Screen
+                    LiveCameraVideoPreview(
+                        isFrontCamera = callState.isFrontCamera,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // Top Badge: Camera Info & Full-Screen Indicator
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .statusBarsPadding()
+                            .padding(top = 16.dp, start = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xCC0F172A),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.6f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(BharatGreenLight)
+                                )
+                                Text(
+                                    text = if (callState.isFrontCamera) "Self: Front Camera (Tap to minimize)" else "Self: Back Camera (Tap to minimize)",
+                                    fontSize = 11.5.sp,
+                                    color = BharatWhite,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    // Floating minimize & flip button bar at top-right
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(top = 16.dp, end = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Quick Flip camera button
+                        IconButton(
+                            onClick = { viewModel.flipCamera() },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xCC0F172A))
+                                .testTag("fullscreen_flip_camera_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FlipCameraAndroid,
+                                contentDescription = "Flip Camera",
+                                tint = BharatElectricCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Minimize to small PiP button
+                        IconButton(
+                            onClick = { isCameraFullScreen = false },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xCC0F172A))
+                                .testTag("minimize_camera_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FullscreenExit,
+                                contentDescription = "Minimize Camera",
+                                tint = BharatWhite,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    // Remote Participant Small Floating PiP Card
+                    GlassCard(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(bottom = 160.dp, end = 16.dp)
+                            .size(width = 110.dp, height = 150.dp)
+                            .clickable { isCameraFullScreen = false }
+                            .testTag("pip_remote_view"),
+                        shape = RoundedCornerShape(18.dp),
+                        backgroundColor = Color(0xCC0F172A),
+                        borderColor = BharatSaffron.copy(alpha = 0.7f)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(54.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(BharatSaffron, BharatElectricCyan, BharatGreenLight)
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = callState.contactAvatar,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BharatWhite
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = callState.contactName,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BharatWhite,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = "Remote Feed",
+                                fontSize = 9.sp,
+                                color = BharatElectricCyan
+                            )
+                        }
+                    }
+                }
+            } else {
+                // --- STANDARD VIEW: REMOTE FULL SCREEN & LOCAL CAMERA IN SMALL PIP ---
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFF0B192C),
+                                    Color(0xFF0F172A),
+                                    Color(0xFF020617)
+                                )
+                            )
+                        )
+                ) {
+                    // Video simulation pattern / grid
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(130.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(BharatSaffron, BharatElectricCyan, BharatGreenLight)
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (callState.isFrontCamera) "Front" else "Back",
-                                fontSize = 9.sp,
-                                color = BharatElectricCyan,
+                                text = callState.contactAvatar,
+                                fontSize = 44.sp,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                color = BharatWhite
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = callState.contactName,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BharatWhite
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(BharatGreenLight)
+                            )
+                            Text(
+                                text = "WebRTC P2P Ultra-HD Stream Active",
+                                fontSize = 12.sp,
+                                color = BharatElectricCyan,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // PiP (Picture-in-Picture) Local Camera Preview (Tap to expand full screen!)
+                    GlassCard(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(top = 60.dp, end = 16.dp)
+                            .size(width = 120.dp, height = 160.dp)
+                            .clickable { isCameraFullScreen = true }
+                            .testTag("pip_camera_preview"),
+                        shape = RoundedCornerShape(18.dp),
+                        backgroundColor = Color(0xCC0F172A),
+                        borderColor = BharatElectricCyan.copy(alpha = 0.8f)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            // Real hardware camera preview feed
+                            LiveCameraVideoPreview(
+                                isFrontCamera = callState.isFrontCamera,
+                                modifier = Modifier.fillMaxSize()
+                            )
+
+                            // Top overlay: Tap to expand hint & camera facing badge
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(4.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xAA000000)
+                            ) {
+                                Text(
+                                    text = if (callState.isFrontCamera) "Front • Tap Full" else "Back • Tap Full",
+                                    fontSize = 8.5.sp,
+                                    color = BharatElectricCyan,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            // Fullscreen icon badge top right
+                            IconButton(
+                                onClick = { isCameraFullScreen = true },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(2.dp)
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0x88000000))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Fullscreen,
+                                    contentDescription = "Full Screen Camera",
+                                    tint = BharatWhite,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+
+                            // Camera flip mini badge button
+                            IconButton(
+                                onClick = { viewModel.flipCamera() },
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(4.dp)
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xCC000000))
+                                    .testTag("flip_camera_pip_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FlipCameraAndroid,
+                                    contentDescription = "Flip Camera",
+                                    tint = BharatWhite,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
                 }

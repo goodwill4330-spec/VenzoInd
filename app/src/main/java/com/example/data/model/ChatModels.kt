@@ -150,7 +150,7 @@ data class ContactEntity(
     val upiVpa: String = "",
     val avatarInitial: String,
     val avatarColorHex: String = "#FF671F",
-    val statusMsg: String = "Available on Bharat Chat",
+    val statusMsg: String = "Available on VenzoInd 🇮🇳",
     val isBharatChatUser: Boolean = true,
     val isFavorite: Boolean = false,
     val isBlocked: Boolean = false,
@@ -159,7 +159,9 @@ data class ContactEntity(
     val profilePicUri: String? = null
 ) {
     val statusBio: String get() = statusMsg
+    val status: String get() = statusMsg
     val upiId: String get() = upiVpa
+    val isVenzoUser: Boolean get() = isBharatChatUser
 }
 
 data class PollOption(
@@ -179,10 +181,10 @@ data class NearbyUser(
 
 data class UserProfile(
     val name: String = "Vikram Aditya",
-    val bharatId: String = "@vikram_bharat",
+    val bharatId: String = "@vikram_venzo",
     val phone: String = "+91 98765 43210",
-    val email: String = "vikram.aditya@bharat.in",
-    val upiVpa: String = "vikram@upi",
+    val email: String = "vikram.aditya@venzoind.com",
+    val upiVpa: String = "vikram@venzo",
     val walletBalance: Double = 14850.50,
     val isCloudBackupEnabled: Boolean = true,
     val totalStorageUsedGb: Double = 1.4,
@@ -193,4 +195,8 @@ data class UserProfile(
     val avatarColorHex: String = "#FF671F",
     val customAvatarIndex: Int = 0,
     val profilePicUri: String = ""
-)
+) {
+    val upiId: String get() = upiVpa
+    val status: String get() = statusBio
+    val venzoId: String get() = bharatId
+}

@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,7 +30,7 @@ fun SplashScreen(
     onSplashFinished: () -> Unit
 ) {
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(2000)
+        kotlinx.coroutines.delay(800)
         onSplashFinished()
     }
 
@@ -57,7 +58,8 @@ fun SplashScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground),
+            .background(DarkBackground)
+            .clickable { onSplashFinished() },
         contentAlignment = Alignment.Center
     ) {
         // Atmospheric radial tricolor glows

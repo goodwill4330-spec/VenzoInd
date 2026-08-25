@@ -1,5 +1,6 @@
 package com.example
 
+import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,12 +12,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.google.accompanist.permissions.rememberPermissionState
 import com.example.ui.screens.*
 import com.example.ui.theme.BharatChatTheme
 import com.example.ui.viewmodel.AppScreen
 import com.example.ui.viewmodel.BharatChatViewModel
 
 class MainActivity : ComponentActivity() {
+    @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -26,6 +32,15 @@ class MainActivity : ComponentActivity() {
             val currentScreen by chatViewModel.currentScreen.collectAsState()
             val isLoggedIn by chatViewModel.isUserLoggedIn.collectAsState()
             val incomingCall by chatViewModel.incomingCallEvent.collectAsState()
+
+            // Accompanist Permissions: State initialized for user-initiated camera and audio actions
+            val cameraPermissionState = rememberPermissionState(permission = Manifest.permission.CAMERA)
+            val callPermissionsState = rememberMultiplePermissionsState(
+                permissions = listOf(
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.RECORD_AUDIO
+                )
+            )
 
             BharatChatTheme(darkTheme = isDark) {
                 Surface(

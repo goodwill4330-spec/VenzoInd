@@ -7,7 +7,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 // =======================================================================
-// BHARAT CHAT: CYBER-FUTURISTIC & TRICOLOR TYPOGRAPHY SYSTEM
+// VENZOIND: CYBER-FUTURISTIC & TRICOLOR TYPOGRAPHY SYSTEM
 // Crisp letter-spacing, authoritative weights, and clean readability
 // =======================================================================
 

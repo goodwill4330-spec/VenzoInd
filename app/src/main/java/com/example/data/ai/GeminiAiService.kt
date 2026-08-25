@@ -31,12 +31,12 @@ class GeminiAiService {
         withContext(Dispatchers.IO) {
             if (apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY") {
                 try {
-                    val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey"
+                    val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
                     
                     val contentsArray = JSONArray()
                     
                     // System context
-                    val systemInstruction = "You are 'Bharat AI', an ultra-smart, friendly, patriotic Indian AI copilot in Bharat Chat. You help users with coding, UPI payments, productivity, drafting messages in Indian languages (Hindi, Tamil, Telugu, Marathi, Bengali, English), summarization, and knowledge about India, science, technology, and culture. Keep replies concise, formatting with bold text and clean bullet points where appropriate."
+                    val systemInstruction = "You are 'Venzo AI', an ultra-smart, friendly, patriotic Indian AI copilot in VenzoInd. You help users with coding, UPI payments, productivity, drafting messages in Indian languages (Hindi, Tamil, Telugu, Marathi, Bengali, English), summarization, and knowledge about India, science, technology, and culture. Keep replies concise, formatting with bold text and clean bullet points where appropriate."
                     
                     for ((role, text) in history.takeLast(4)) {
                         val turn = JSONObject().apply {
@@ -150,25 +150,25 @@ class GeminiAiService {
         val lower = prompt.lowercase()
         return when {
             lower.contains("upi") || lower.contains("payment") || lower.contains("money") ->
-                "💳 **Bharat UPI Integration**:\nYou can send money up to **₹1,00,000** instantly inside any chat. Tap the **Attach (+) icon > UPI Payment** or scan any QR code with the top scanner. Transactions are secured by RBI quantum-grade 256-bit encryption."
+                "💳 **VenzoInd UPI Integration**:\nYou can send money up to **₹1,00,000** instantly inside any chat. Tap the **Attach (+) icon > UPI Payment** or scan any QR code with the top scanner. Transactions are secured by RBI quantum-grade 256-bit encryption."
             
             lower.contains("encrypted") || lower.contains("security") || lower.contains("privacy") ->
-                "🛡️ **Quantum End-to-End Encryption**:\nEvery message, voice note, and 4K call on Bharat Chat uses Signal-grade Double Ratchet quantum encryption. Even secret chats feature self-destruct timers (5s to 60s) and screenshot blocking."
+                "🛡️ **Quantum End-to-End Encryption**:\nEvery message, voice note, and 4K call on VenzoInd uses Signal-grade Double Ratchet quantum encryption. Even secret chats feature self-destruct timers (5s to 60s) and screenshot blocking."
             
             lower.contains("translate") || lower.contains("hindi") || lower.contains("language") ->
-                "🌐 **Live Indian Multi-Language Translation**:\nBharat Chat supports 12+ Indian languages including Hindi, Tamil, Telugu, Marathi, Bengali, and Gujarati. Tap any message and select **Translate** to view instant bilingual transcriptions."
+                "🌐 **Live Indian Multi-Language Translation**:\nVenzoInd supports 12+ Indian languages including Hindi, Tamil, Telugu, Marathi, Bengali, and Gujarati. Tap any message and select **Translate** to view instant bilingual transcriptions."
             
             lower.contains("summarize") || lower.contains("summary") ->
                 "📋 **AI Chat Summarization**:\nTap the AI wand icon inside any group or 1-on-1 chat to generate an instant bulleted recap of all unread messages, action items, and shared attachments."
             
             lower.contains("file") || lower.contains("10gb") || lower.contains("storage") ->
-                "📁 **10GB Cloud File Transfer**:\nBharat Chat supports zero-compression file transfers up to 10GB per file, backed by ultra-fast distributed Indian servers."
+                "📁 **10GB Cloud File Transfer**:\nVenzoInd supports zero-compression file transfers up to 10GB per file, backed by ultra-fast distributed Indian servers."
             
-            lower.contains("isro") || lower.contains("india") || lower.contains("bharat") ->
-                "🇮🇳 **Digital Bharat Innovation**:\nBharat Chat is designed to connect 1.4 billion citizens with pride, speed, and privacy. From UPI integration to local language AI, it represents the next generation of sovereign digital infrastructure."
+            lower.contains("isro") || lower.contains("india") || lower.contains("bharat") || lower.contains("venzo") ->
+                "🇮🇳 **Digital Sovereign Innovation**:\nVenzoInd is designed to connect 1.4 billion citizens with pride, speed, and privacy. From UPI integration to local language AI, it represents the next generation of sovereign digital infrastructure."
 
             else ->
-                "✨ **Bharat AI Copilot**:\nI am here to help you draft emails, translate chats across 12+ Indian languages, summarize discussions, plan tasks, and manage UPI payments. How can I assist you today?"
+                "✨ **Venzo AI Copilot**:\nI am here to help you draft emails, translate chats across 12+ Indian languages, summarize discussions, plan tasks, and manage UPI payments on VenzoInd. How can I assist you today?"
         }
     }
 }

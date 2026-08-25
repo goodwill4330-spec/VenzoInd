@@ -1740,6 +1740,7 @@ private fun PersonalQrDialog(
     onDismiss: () -> Unit
 ) {
     val bColors = LocalBharatColors.current
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1804,9 +1805,26 @@ private fun PersonalQrDialog(
         },
         confirmButton = {
             Button(
-                onClick = onDismiss,
+                onClick = {
+                    onDismiss()
+                    try {
+                        val shareText = "Scan to chat with me on VenzoInd Bharat Sovereign Messenger! 🇮🇳\nName: ${userProfile.name}\nPhone: ${userProfile.phone.ifBlank { "+91 98765 43210" }}\nUPI ID: ${userProfile.upiId.ifBlank { "venzo@upi" }}\nPost-Quantum Kyber-1024 Encrypted"
+                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                            putExtra(Intent.EXTRA_SUBJECT, "Connect with ${userProfile.name} on VenzoInd")
+                            putExtra(Intent.EXTRA_TEXT, shareText)
+                            type = "text/plain"
+                        }
+                        val shareIntent = Intent.createChooser(sendIntent, "Share My QR Contact")
+                        shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(shareIntent)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Could not open share: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight)
             ) {
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text("SHARE QR CODE", fontWeight = FontWeight.Bold)
             }
         },

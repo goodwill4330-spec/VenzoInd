@@ -377,7 +377,7 @@ fun NewChatBottomSheet(
                     if (chatTitle.isNotBlank()) {
                         viewModel.createChat(
                             title = chatTitle,
-                            subtitle = chatSubtitle.ifBlank { if (isSecret) "Quantum Secret Chat" else "Active on Bharat Chat" },
+                            subtitle = chatSubtitle.ifBlank { if (isSecret) "Quantum Secret Chat" else "Active on VenzoInd 🇮🇳" },
                             isGroup = isGroup,
                             isSecret = isSecret,
                             isBusiness = false
@@ -882,7 +882,7 @@ fun QrScannerDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Point camera at any UPI QR or Bharat Chat Web login screen",
+                    text = "Point camera at any UPI QR or VenzoInd Web login screen",
                     fontSize = 12.sp,
                     color = TextSecondaryDark,
                     textAlign = TextAlign.Center
@@ -2982,6 +2982,7 @@ fun ContactProfileDialog(
     onDismiss: () -> Unit
 ) {
     val bColors = LocalBharatColors.current
+    val context = LocalContext.current
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -3241,6 +3242,34 @@ fun ContactProfileDialog(
                     Icon(Icons.Default.ZoomIn, null, tint = BharatElectricCyan, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Zoom Profile Picture (DP)", fontWeight = FontWeight.Bold, color = BharatWhite, fontSize = 13.sp)
+                }
+
+                // Share Contact Details Button
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            val shareText = "VenzoInd Contact Card:\nName: ${contact.name}\nPhone: ${contact.phone}\nUPI ID: ${contact.upiId}\nStatus: ${contact.status}\nEncrypted with CRYSTALS-Kyber-1024"
+                            val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                putExtra(android.content.Intent.EXTRA_SUBJECT, "Contact: ${contact.name}")
+                                putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+                                type = "text/plain"
+                            }
+                            val shareIntent = android.content.Intent.createChooser(sendIntent, "Share Contact via")
+                            shareIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(shareIntent)
+                        } catch (e: Exception) {
+                            android.widget.Toast.makeText(context, "Could not share contact: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("share_contact_button")
+                ) {
+                    Icon(Icons.Default.Share, null, tint = BharatElectricCyan, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Share Contact Details", fontWeight = FontWeight.Bold, color = BharatElectricCyan, fontSize = 13.sp)
                 }
 
                 // Delete Contact & Chat Button

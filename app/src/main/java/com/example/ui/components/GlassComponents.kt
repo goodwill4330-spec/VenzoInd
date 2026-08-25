@@ -22,12 +22,21 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.ui.theme.*
+
+enum class ContactPresence {
+    ONLINE,
+    AWAY,
+    BUSY,
+    OFFLINE
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -72,10 +81,12 @@ fun GlassCard(
 fun StatusRingAvatar(
     initial: String,
     avatarColorHex: String = "#FF671F",
+    imageUri: String? = null,
     size: Dp = 52.dp,
     hasStory: Boolean = false,
     isStoryViewed: Boolean = false,
     isOnline: Boolean = false,
+    presence: ContactPresence? = null,
     isAiBot: Boolean = false,
     onClick: () -> Unit = {}
 ) {
@@ -85,6 +96,29 @@ fun StatusRingAvatar(
     } catch (e: Exception) {
         BharatSaffron
     }
+
+    val effectivePresence = presence ?: if (isOnline) ContactPresence.ONLINE else ContactPresence.OFFLINE
+
+    // Pulsing effect for active online status
+    val infiniteTransition = rememberInfiniteTransition(label = "avatar_pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_scale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_alpha"
+    )
 
     Box(
         modifier = Modifier
@@ -107,14 +141,15 @@ fun StatusRingAvatar(
             )
         }
 
-        // Inner Avatar Box
+        // Inner Avatar Box / Image
+        val innerSize = if (hasStory) size - 7.dp else size
         Box(
             modifier = Modifier
-                .size(if (hasStory) size - 7.dp else size)
+                .size(innerSize)
                 .clip(CircleShape)
                 .background(
                     if (isAiBot) Brush.linearGradient(listOf(BharatSaffron, BharatNavyLight, BharatGreenDark))
-                    else Brush.linearGradient(listOf(avatarBg, avatarBg.copy(alpha = 0.7f)))
+                    else Brush.linearGradient(listOf(avatarBg, avatarBg.copy(alpha = 0.75f)))
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -125,9 +160,18 @@ fun StatusRingAvatar(
                     tint = BharatWhite,
                     modifier = Modifier.size(size * 0.5f)
                 )
+            } else if (!imageUri.isNullOrBlank()) {
+                AsyncImage(
+                    model = imageUri,
+                    contentDescription = "Profile Photo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                )
             } else {
                 Text(
-                    text = initial.take(2).uppercase(),
+                    text = initial.take(2).uppercase().ifEmpty { "C" },
                     color = BharatWhite,
                     fontWeight = FontWeight.Bold,
                     fontSize = (size.value * 0.38f).sp
@@ -135,16 +179,37 @@ fun StatusRingAvatar(
             }
         }
 
-        // Online dot
-        if (isOnline) {
+        // Presence Status Indicator Badge / Dot
+        if (effectivePresence != ContactPresence.OFFLINE) {
+            val (statusColor, showPulse) = when (effectivePresence) {
+                ContactPresence.ONLINE -> OnlineGreen to true
+                ContactPresence.AWAY -> Color(0xFFF59E0B) to false
+                ContactPresence.BUSY -> Color(0xFFEF4444) to false
+                ContactPresence.OFFLINE -> Color(0xFF94A3B8) to false
+            }
+
             Box(
                 modifier = Modifier
-                    .size(size * 0.28f)
-                    .align(Alignment.BottomEnd)
-                    .clip(CircleShape)
-                    .background(OnlineGreen)
-                    .border(2.dp, if (bColors.isDark) DarkBackground else LightBackground, CircleShape)
-            )
+                    .size(size * 0.32f)
+                    .align(Alignment.BottomEnd),
+                contentAlignment = Alignment.Center
+            ) {
+                if (showPulse) {
+                    Box(
+                        modifier = Modifier
+                            .size(size * 0.32f * pulseScale)
+                            .clip(CircleShape)
+                            .background(statusColor.copy(alpha = pulseAlpha))
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(size * 0.28f)
+                        .clip(CircleShape)
+                        .background(statusColor)
+                        .border(2.dp, if (bColors.isDark) DarkBackground else LightBackground, CircleShape)
+                )
+            }
         }
     }
 }

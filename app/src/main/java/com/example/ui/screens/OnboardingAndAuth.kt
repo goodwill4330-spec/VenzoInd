@@ -311,6 +311,9 @@ fun AuthScreen(
     val isNewAccountMode by authViewModel.isNewAccountMode.collectAsState()
     val selectedCountry by authViewModel.selectedCountry.collectAsState()
     val phoneNumberInput by authViewModel.phoneNumberInput.collectAsState()
+    val phoneValidationError by authViewModel.phoneValidationError.collectAsState()
+    val detectedSims by authViewModel.detectedSims.collectAsState()
+    val selectedSim by authViewModel.selectedSim.collectAsState()
     val authStatus by authViewModel.authStatus.collectAsState()
     val otpDigits by authViewModel.otpDigits.collectAsState()
     val generatedBackupOtp by authViewModel.generatedBackupOtp.collectAsState()
@@ -323,6 +326,17 @@ fun AuthScreen(
     var countrySearchQuery by remember { mutableStateOf("") }
     var showConfirmNumberDialog by remember { mutableStateOf(false) }
     val focusRequesters = remember { List(6) { FocusRequester() } }
+
+    // SIM card detection permissions launcher
+    val simPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions.values.any { it }
+        if (granted) {
+            authViewModel.refreshSimCards(context)
+            Toast.makeText(context, "SIM Cards detected from device", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // Profile Setup states
     var userNameInput by remember { mutableStateOf("VenzoInd User") }
@@ -527,13 +541,15 @@ fun AuthScreen(
                                     )
                                 },
                                 singleLine = true,
+                                isError = phoneValidationError != null,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = BharatGreenLight,
-                                    unfocusedBorderColor = Color(0xFF334155),
+                                    unfocusedBorderColor = if (phoneValidationError != null) Color(0xFFEF4444) else Color(0xFF334155),
                                     focusedContainerColor = Color(0xFF1E293B),
                                     unfocusedContainerColor = Color(0xFF1E293B),
                                     focusedTextColor = BharatWhite,
-                                    unfocusedTextColor = BharatWhite
+                                    unfocusedTextColor = BharatWhite,
+                                    errorBorderColor = Color(0xFFEF4444)
                                 ),
                                 shape = RoundedCornerShape(12.dp),
                                 keyboardOptions = KeyboardOptions(
@@ -542,7 +558,11 @@ fun AuthScreen(
                                 ),
                                 keyboardActions = KeyboardActions(
                                     onDone = {
-                                        if (phoneNumberInput.isNotBlank()) showConfirmNumberDialog = true
+                                        if (authViewModel.validateCurrentPhone()) {
+                                            showConfirmNumberDialog = true
+                                        } else {
+                                            Toast.makeText(context, phoneValidationError ?: "Invalid phone number", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 ),
                                 modifier = Modifier
@@ -552,33 +572,126 @@ fun AuthScreen(
                             )
                         }
 
+                        // Phone validation error feedback
+                        if (phoneValidationError != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "⚠️ ${phoneValidationError ?: ""}",
+                                color = Color(0xFFEF4444),
+                                fontSize = 12.sp,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Quick demo helper pill
+                        // Device SIM Card Detection Section
                         Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = Color(0x2210B981),
-                            border = BorderStroke(1.dp, BharatGreenLight.copy(alpha = 0.3f)),
-                            modifier = Modifier.clickable {
-                                authViewModel.updatePhoneNumber("9876543210")
-                            }
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0xFF1E293B),
+                            border = BorderStroke(1.dp, Color(0xFF334155)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = "💡 Tap for test number: 98765 43210",
-                                fontSize = 11.5.sp,
-                                color = BharatGreenLight,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.SimCard, contentDescription = null, tint = BharatGreenLight, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "DEVICE SIM DETECTED",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = BharatGreenLight,
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    }
+
+                                    TextButton(
+                                        onClick = {
+                                            simPermissionLauncher.launch(
+                                                arrayOf(
+                                                    android.Manifest.permission.READ_PHONE_STATE,
+                                                    android.Manifest.permission.READ_PHONE_NUMBERS
+                                                )
+                                            )
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Detect SIM", fontSize = 11.5.sp, color = BharatElectricCyan, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                if (detectedSims.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        detectedSims.forEach { sim ->
+                                            val isSelected = selectedSim?.slotIndex == sim.slotIndex
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = if (isSelected) Color(0x3310B981) else Color(0xFF0F172A),
+                                                border = BorderStroke(1.dp, if (isSelected) BharatGreenLight else Color(0xFF334155)),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clickable {
+                                                        authViewModel.selectSim(sim)
+                                                        Toast.makeText(context, "Selected ${sim.carrierName}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                            ) {
+                                                Column(modifier = Modifier.padding(8.dp)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                            text = "SIM ${sim.slotIndex + 1}: ${sim.carrierName}",
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isSelected) BharatGreenLight else BharatWhite
+                                                        )
+                                                    }
+                                                    if (!sim.phoneNumber.isNullOrBlank()) {
+                                                        Text(
+                                                            text = "+91 ${sim.phoneNumber}",
+                                                            fontSize = 11.sp,
+                                                            color = TextSecondaryDark
+                                                        )
+                                                    } else {
+                                                        Text(
+                                                            text = "Tap to use this SIM",
+                                                            fontSize = 10.5.sp,
+                                                            color = BharatElectricCyan
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Text(
+                                        text = "Insert active SIM card into mobile for 1-tap verification.",
+                                        fontSize = 11.5.sp,
+                                        color = TextSecondaryDark
+                                    )
+                                }
+                            }
                         }
                     }
 
-                    // Next Button
+                    // Next Button with Strict Validation
                     Button(
                         onClick = {
-                            if (phoneNumberInput.isBlank()) {
-                                authViewModel.updatePhoneNumber("9876543210")
+                            val isValid = authViewModel.validateCurrentPhone()
+                            if (isValid) {
+                                showConfirmNumberDialog = true
+                            } else {
+                                val err = phoneValidationError ?: "Please enter a valid 10-digit Indian mobile number."
+                                Toast.makeText(context, err, Toast.LENGTH_LONG).show()
                             }
-                            showConfirmNumberDialog = true
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -633,11 +746,11 @@ fun AuthScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Status Info Pill (Firebase Phone Auth Handshake Feedback)
+                        // Status Info Pill (Auth Handshake Feedback)
                         val statusText = when (authStatus) {
-                            is PhoneAuthStatus.SendingCode -> "📡 Connecting to Firebase SMS Gateway..."
-                            is PhoneAuthStatus.CodeSent -> "✅ SMS dispatched to $fullE164"
-                            is PhoneAuthStatus.AutoVerified -> "⚡ Instant Google Play Services Auto-Detection!"
+                            is PhoneAuthStatus.SendingCode -> "📡 Preparing verification code..."
+                            is PhoneAuthStatus.CodeSent -> "✅ Verification code ready for $fullE164"
+                            is PhoneAuthStatus.AutoVerified -> "⚡ Instant Auto-Detection Verified!"
                             is PhoneAuthStatus.Error -> (authStatus as PhoneAuthStatus.Error).message
                             else -> "⚡ High-Speed OTP Delivery Active"
                         }
@@ -858,7 +971,8 @@ fun AuthScreen(
                         onClick = {
                             val entered = otpDigits.joinToString("")
                             if (entered.length < 6) {
-                                authViewModel.fillOtp(generatedBackupOtp)
+                                Toast.makeText(context, "Please enter complete 6-digit OTP", Toast.LENGTH_SHORT).show()
+                                return@Button
                             }
                             authViewModel.verifyEnteredOtp {
                                 currentStep = AuthStep.PROFILE_SETUP

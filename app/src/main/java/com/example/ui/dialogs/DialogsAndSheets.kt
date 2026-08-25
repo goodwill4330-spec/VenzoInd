@@ -1134,6 +1134,7 @@ fun AttachmentOptionsBottomSheet(
         Triple("Camera Photo", Icons.Default.PhotoCamera, BharatSaffron),
         Triple("Schedule Message", Icons.Default.Schedule, Color(0xFF38BDF8)),
         Triple("UPI Instant Pay", Icons.Default.CurrencyRupee, BharatGreenLight),
+        Triple("Business Catalogue", Icons.Default.Storefront, BharatSaffron),
         Triple("10GB Cloud File", Icons.Default.InsertDriveFile, BharatElectricCyan),
         Triple("Interactive Poll", Icons.Default.Poll, Color(0xFFA855F7)),
         Triple("Live Location", Icons.Default.LocationOn, Color(0xFFF59E0B)),
@@ -1200,6 +1201,9 @@ fun AttachmentOptionsBottomSheet(
                                         }
                                         "UPI Instant Pay" -> {
                                             viewModel.showUpiPaymentSheet.value = true
+                                        }
+                                        "Business Catalogue" -> {
+                                            viewModel.showCataloguePickerSheet.value = true
                                         }
                                         "10GB Cloud File" -> {
                                             if (onPickDocument != null) {

@@ -42,6 +42,9 @@ interface ChatDao {
     @Query("UPDATE chats SET isPinned = CASE WHEN isPinned = 1 THEN 0 ELSE 1 END WHERE id = :chatId")
     suspend fun toggleChatPin(chatId: String)
 
+    @Query("SELECT COUNT(*) FROM chats")
+    suspend fun getChatsCount(): Int
+
     @Query("DELETE FROM chats WHERE id = :chatId")
     suspend fun deleteChat(chatId: String)
 
@@ -143,6 +146,9 @@ interface CallDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCalls(calls: List<CallEntity>)
+
+    @Query("SELECT COUNT(*) FROM calls")
+    suspend fun getCallsCount(): Int
 
     @Query("DELETE FROM calls WHERE id = :callId")
     suspend fun deleteCall(callId: String)

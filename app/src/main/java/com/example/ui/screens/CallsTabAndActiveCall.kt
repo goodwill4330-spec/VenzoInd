@@ -1364,18 +1364,46 @@ fun ActiveCallScreen(
         }
 
         // Proximity Sensor Screen-Off & Anti-Accidental Touch Overlay
-        // Turns off display / renders black screen when phone is held to ear (speaker OFF)
-        if (isProximityNear && !callState.isSpeakerOn) {
+        // Turns off display / dims when phone is held to ear (speaker OFF in voice calls)
+        if (isProximityNear && !callState.isSpeakerOn && !callState.isVideo) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .zIndex(999f)
-                    .background(Color.Black)
-                    .pointerInput(Unit) {
-                        // Consumes all touch events to prevent accidental ear/cheek touches
+                    .background(Color.Black.copy(alpha = 0.95f))
+                    .clickable {
+                        // Allow user to tap anywhere to wake display on emulators or accidental sensor triggers
+                        viewModel.toggleSpeaker()
                     }
-                    .testTag("proximity_screen_off_overlay")
-            )
+                    .testTag("proximity_screen_off_overlay"),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Hearing,
+                        contentDescription = null,
+                        tint = BharatElectricCyan,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Call Active • Earpiece Mode",
+                        color = BharatWhite,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Tap anywhere or switch to Speaker to wake screen",
+                        color = TextSecondaryDark,
+                        fontSize = 12.5.sp
+                    )
+                }
+            }
         }
     }
 }

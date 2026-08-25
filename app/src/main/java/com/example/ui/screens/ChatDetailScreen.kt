@@ -77,6 +77,7 @@ fun ChatDetailScreen(
     val showScheduleMessage by viewModel.showScheduleMessageDialog.collectAsState()
     val showLocationShare by viewModel.showLocationShareSheet.collectAsState()
     val showCloudDocPicker by viewModel.showCloudDocPickerSheet.collectAsState()
+    val showCataloguePicker by viewModel.showCataloguePickerSheet.collectAsState()
     val showForwardDialog by viewModel.showForwardDialog.collectAsState()
     val forwardMessagesList by viewModel.forwardSelectedMessages.collectAsState()
     val showContactProfile by viewModel.showContactProfileDialog.collectAsState()
@@ -1201,6 +1202,18 @@ fun ChatDetailScreen(
                         },
                         onVotePoll = { optionIdx ->
                             viewModel.votePoll(message.id, optionIdx)
+                        },
+                        onPayCatalogue = { price, title ->
+                            viewModel.sendUpiMoney(
+                                recipientName = chat.title,
+                                upiId = "${chat.title.lowercase().replace(" ", "")}@bharatupi",
+                                amount = price,
+                                note = "Order: $title"
+                            )
+                            android.widget.Toast.makeText(context, "UPI Order Placed: $title (₹${price.toInt()}) ⚡", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        onReply = {
+                            replyingToMessage = message
                         }
                     )
                 }
@@ -1325,6 +1338,16 @@ fun ChatDetailScreen(
             viewModel = viewModel,
             onPickSystemFile = { docPickerLauncher.launch("*/*") },
             onDismiss = { viewModel.showCloudDocPickerSheet.value = false }
+        )
+    }
+
+    if (showCataloguePicker) {
+        CataloguePickerBottomSheet(
+            viewModel = viewModel,
+            onDismiss = { viewModel.showCataloguePickerSheet.value = false },
+            onProductSelected = { prod ->
+                viewModel.sendCatalogueProduct(prod)
+            }
         )
     }
 
@@ -1792,7 +1815,9 @@ fun MessageBubble(
     onLongClick: () -> Unit,
     onTranslate: () -> Unit,
     onPlayTts: () -> Unit,
-    onVotePoll: ((Int) -> Unit)? = null
+    onVotePoll: ((Int) -> Unit)? = null,
+    onPayCatalogue: ((Double, String) -> Unit)? = null,
+    onReply: (() -> Unit)? = null
 ) {
     val isMe = message.isFromMe
     val bColors = LocalBharatColors.current
@@ -2270,6 +2295,169 @@ fun MessageBubble(
                                     Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text("Open Live Directions", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    // Product Catalogue Bubble
+                    else if (message.messageType == MessageType.CATALOGUE.name) {
+                        val productTitle = message.catalogueTitle ?: message.text
+                        val productPrice = message.cataloguePrice ?: message.upiAmount ?: 0.0
+                        val productCategory = message.catalogueCategory ?: "Catalogue"
+                        val productDesc = message.catalogueDescription ?: ""
+                        val discountPct = message.catalogueDiscountPercent ?: 0
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (bColors.isDark) Color(0xFF131D2E) else Color(0xFFF8FAFC),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BharatSaffron.copy(alpha = 0.4f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("catalogue_message_card_${message.id}")
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                // Product Header & Category Badge
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Storefront,
+                                            contentDescription = null,
+                                            tint = BharatSaffron,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = "Product Catalogue",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.5.sp,
+                                            color = BharatSaffron
+                                        )
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = BharatGreenLight.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = productCategory,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = BharatGreenLight,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // Product Title
+                                Text(
+                                    text = productTitle,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = if (isMe) BharatWhite else bColors.textPrimary
+                                )
+
+                                if (productDesc.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = productDesc,
+                                        fontSize = 12.sp,
+                                        color = if (isMe) BharatWhite.copy(alpha = 0.85f) else bColors.textSecondary,
+                                        lineHeight = 16.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Pricing & Discount Bar
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.Bottom,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "₹${productPrice.toInt()}",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 18.sp,
+                                            color = BharatGreenLight
+                                        )
+                                        if (discountPct > 0) {
+                                            Surface(
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = Color(0xFFEF4444).copy(alpha = 0.15f)
+                                            ) {
+                                                Text(
+                                                    text = "$discountPct% OFF",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFEF4444),
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Text(
+                                        text = "✓ Verified Seller",
+                                        fontSize = 10.sp,
+                                        color = BharatElectricCyan,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Action Buttons (Instant UPI Pay / Order Now)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            onPayCatalogue?.invoke(productPrice, productTitle)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight),
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("catalogue_pay_upi_button_${message.id}")
+                                    ) {
+                                        Icon(Icons.Default.CurrencyRupee, contentDescription = null, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Pay & Order (₹${productPrice.toInt()})",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+
+                                    FilledTonalIconButton(
+                                        onClick = {
+                                            onReply?.invoke()
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Reply,
+                                            contentDescription = "Inquire",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = bColors.textPrimary
+                                        )
+                                    }
                                 }
                             }
                         }

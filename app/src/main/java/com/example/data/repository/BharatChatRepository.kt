@@ -142,12 +142,23 @@ class BharatChatRepository(
         context?.let { ctx ->
             try {
                 val devId = com.example.data.local.UserProfileDataStore(ctx).getDeviceId()
+                val chatObj = chatDao.getChatById(chatId)
                 val targetDev = if (chatId.startsWith("chat_")) chatId.removePrefix("chat_") else ""
                 var targetPhone = ""
                 val contact = contactDao.getContactById(if (chatId.startsWith("chat_")) "contact_${chatId.removePrefix("chat_")}" else "contact_$chatId")
                     ?: contactDao.getContactById(chatId)
+                    ?: contactDao.getAllContactsList().firstOrNull { c ->
+                        (chatObj != null && c.name.equals(chatObj.title, ignoreCase = true)) ||
+                        (chatObj != null && chatObj.subtitle.contains(c.phone)) ||
+                        (c.phone.isNotBlank() && chatId.contains(c.phone.filter { it.isDigit() }.takeLast(8)))
+                    }
                 if (contact != null && contact.phone.isNotBlank()) {
                     targetPhone = contact.phone
+                } else if (chatObj != null) {
+                    val digits = chatObj.subtitle.filter { it.isDigit() }
+                    if (digits.length >= 10) {
+                        targetPhone = digits.takeLast(10)
+                    }
                 }
                 FirestoreManager.getInstance(ctx).syncMessageToCloud(
                     message = message,
@@ -167,6 +178,7 @@ class BharatChatRepository(
             MessageType.IMAGE -> "📷 Photo"
             MessageType.POLL -> "📊 Poll: $pollQuestion"
             MessageType.LOCATION -> "📍 Live Location: $text"
+            MessageType.CATALOGUE -> "🛍️ Catalogue: $text"
             else -> text
         }
 
@@ -197,6 +209,81 @@ class BharatChatRepository(
                 chatDao.updateLastMessageWithStatus(chatId, aiReplyText.take(40) + "...", aiTimeStr, aiNow, "SEEN", false)
             }
         }
+    }
+
+    suspend fun sendCatalogueMessage(
+        chatId: String,
+        senderId: String,
+        senderName: String,
+        product: CatalogueProduct
+    ) {
+        val msgId = "msg_${UUID.randomUUID()}"
+        val now = System.currentTimeMillis()
+        val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(now))
+
+        val message = MessageEntity(
+            id = msgId,
+            chatId = chatId,
+            senderId = senderId,
+            senderName = senderName,
+            text = product.title,
+            timestamp = now,
+            timeFormatted = timeStr,
+            isFromMe = true,
+            status = "SENT",
+            isSeen = false,
+            messageType = MessageType.CATALOGUE.name,
+            catalogueTitle = product.title,
+            cataloguePrice = product.price,
+            catalogueImageUrl = product.imageUrl,
+            catalogueDescription = product.description,
+            catalogueCategory = product.category,
+            catalogueDiscountPercent = product.discountPercent,
+            upiAmount = product.price
+        )
+
+        messageDao.insertMessage(message)
+
+        context?.let { ctx ->
+            try {
+                val devId = com.example.data.local.UserProfileDataStore(ctx).getDeviceId()
+                val chatObj = chatDao.getChatById(chatId)
+                val targetDev = if (chatId.startsWith("chat_")) chatId.removePrefix("chat_") else ""
+                var targetPhone = ""
+                val contact = contactDao.getContactById(if (chatId.startsWith("chat_")) "contact_${chatId.removePrefix("chat_")}" else "contact_$chatId")
+                    ?: contactDao.getContactById(chatId)
+                    ?: contactDao.getAllContactsList().firstOrNull { c ->
+                        (chatObj != null && c.name.equals(chatObj.title, ignoreCase = true)) ||
+                        (chatObj != null && chatObj.subtitle.contains(c.phone)) ||
+                        (c.phone.isNotBlank() && chatId.contains(c.phone.filter { it.isDigit() }.takeLast(8)))
+                    }
+                if (contact != null && contact.phone.isNotBlank()) {
+                    targetPhone = contact.phone
+                } else if (chatObj != null) {
+                    val digits = chatObj.subtitle.filter { it.isDigit() }
+                    if (digits.length >= 10) {
+                        targetPhone = digits.takeLast(10)
+                    }
+                }
+                FirestoreManager.getInstance(ctx).syncMessageToCloud(
+                    message = message,
+                    senderDeviceId = devId,
+                    targetDeviceId = targetDev,
+                    targetPhone = targetPhone
+                )
+            } catch (e: Exception) {
+                // Non-blocking
+            }
+        }
+
+        chatDao.updateLastMessageWithStatus(
+            chatId = chatId,
+            lastMsg = "🛍️ Catalogue: ${product.title} (₹${product.price.toInt()})",
+            time = timeStr,
+            timeMillis = now,
+            status = "SENT",
+            isFromMe = true
+        )
     }
 
     suspend fun updateMessageStatus(messageId: String, status: String) {
@@ -358,8 +445,11 @@ class BharatChatRepository(
 
     suspend fun seedInitialDataIfEmpty() {
         try {
+            val now = System.currentTimeMillis()
+            val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+
+            // 1. Seed Contacts if empty
             if (contactDao.getContactsCount() == 0) {
-                val now = System.currentTimeMillis()
                 val initialContacts = listOf(
                     ContactEntity(
                         id = "contact_aarav_sharma",
@@ -610,6 +700,312 @@ class BharatChatRepository(
                     )
                 )
                 contactDao.insertContacts(initialContacts)
+            }
+
+            // 2. Seed Chats & Messages if empty
+            if (chatDao.getChatsCount() == 0) {
+                val initialChats = listOf(
+                    ChatEntity(
+                        id = "chat_ai_assistant",
+                        title = "Bharat AI (भारत एआई)",
+                        subtitle = "🇮🇳 Sovereign AI Assistant • Online",
+                        avatarInitial = "AI",
+                        avatarColorHex = "#FF671F",
+                        isGroup = false,
+                        isSecret = false,
+                        isVerifiedBusiness = false,
+                        isAiAssistant = true,
+                        unreadCount = 0,
+                        lastMessage = "Namaste! How can I assist you today? 🇮🇳",
+                        lastMessageTime = timeFormat.format(Date(now - 120_000L)),
+                        timestamp = now - 120_000L,
+                        isPinned = true,
+                        isOnline = true
+                    ),
+                    ChatEntity(
+                        id = "chat_aarav_sharma",
+                        title = "Aarav Sharma",
+                        subtitle = "+91 98201 12345 • Online",
+                        avatarInitial = "AS",
+                        avatarColorHex = "#0284C7",
+                        isGroup = false,
+                        isSecret = false,
+                        isVerifiedBusiness = false,
+                        unreadCount = 1,
+                        lastMessage = "Let's connect on HD video call in 5 mins! 📞",
+                        lastMessageTime = timeFormat.format(Date(now - 180_000L)),
+                        timestamp = now - 180_000L,
+                        isPinned = true,
+                        isOnline = true
+                    ),
+                    ChatEntity(
+                        id = "chat_aditi_rao",
+                        title = "Aditi Rao",
+                        subtitle = "+91 98450 23456 • Online",
+                        avatarInitial = "AR",
+                        avatarColorHex = "#EC4899",
+                        isGroup = false,
+                        isSecret = false,
+                        isVerifiedBusiness = false,
+                        unreadCount = 0,
+                        lastMessage = "💳 Received ₹500 via Bharat Pay UPI. Thank you!",
+                        lastMessageTime = timeFormat.format(Date(now - 900_000L)),
+                        timestamp = now - 900_000L,
+                        isPinned = true,
+                        isOnline = true
+                    ),
+                    ChatEntity(
+                        id = "chat_isro_tech_hub",
+                        title = "ISRO Quantum & Space Hub",
+                        subtitle = "Aarav, Aditi, Vikram, +12 others",
+                        avatarInitial = "IS",
+                        avatarColorHex = "#F59E0B",
+                        isGroup = true,
+                        isSecret = false,
+                        isVerifiedBusiness = false,
+                        unreadCount = 2,
+                        lastMessage = "Vikram: Sovereign Post-Quantum Kyber-1024 encryption is live 🛡️",
+                        lastMessageTime = timeFormat.format(Date(now - 1800_000L)),
+                        timestamp = now - 1800_000L,
+                        isPinned = false,
+                        isOnline = true
+                    ),
+                    ChatEntity(
+                        id = "chat_vikram_malhotra",
+                        title = "Vikram Malhotra",
+                        subtitle = "+91 98220 89012 • Online",
+                        avatarInitial = "VM",
+                        avatarColorHex = "#10B981",
+                        isGroup = false,
+                        isSecret = false,
+                        isVerifiedBusiness = false,
+                        unreadCount = 0,
+                        lastMessage = "Great! The architecture meets all national standards. 🇮🇳",
+                        lastMessageTime = timeFormat.format(Date(now - 3600_000L)),
+                        timestamp = now - 3600_000L,
+                        isPinned = false,
+                        isOnline = true
+                    ),
+                    ChatEntity(
+                        id = "chat_dr_priya_consult",
+                        title = "Dr. Priya's Organic Spices",
+                        subtitle = "Verified Sovereign Merchant",
+                        avatarInitial = "PS",
+                        avatarColorHex = "#14B8A6",
+                        isGroup = false,
+                        isSecret = false,
+                        isVerifiedBusiness = true,
+                        unreadCount = 0,
+                        lastMessage = "🛍️ Check our premium Kashmiri Saffron & Organic Cardamom!",
+                        lastMessageTime = timeFormat.format(Date(now - 7200_000L)),
+                        timestamp = now - 7200_000L,
+                        isPinned = false,
+                        isOnline = false
+                    ),
+                    ChatEntity(
+                        id = "chat_secret_vault",
+                        title = "🔒 Quantum Secret Vault",
+                        subtitle = "Self-destructing • Kyber-1024",
+                        avatarInitial = "SC",
+                        avatarColorHex = "#EC4899",
+                        isGroup = false,
+                        isSecret = true,
+                        isVerifiedBusiness = false,
+                        unreadCount = 0,
+                        lastMessage = "🔒 Quantum End-to-End Encrypted Session Active",
+                        lastMessageTime = timeFormat.format(Date(now - 14400_000L)),
+                        timestamp = now - 14400_000L,
+                        isPinned = false,
+                        isOnline = true,
+                        disappearingSeconds = 10
+                    )
+                )
+                chatDao.insertChats(initialChats)
+
+                // Seed messages for chats
+                val messages = mutableListOf<MessageEntity>()
+
+                // AI Assistant messages
+                messages.add(
+                    MessageEntity(
+                        id = "msg_ai_1",
+                        chatId = "chat_ai_assistant",
+                        senderId = "bharat_ai",
+                        senderName = "Bharat AI",
+                        text = "🇮🇳 **Namaste! I am Bharat AI**, your sovereign AI assistant built for India.\n\nI can help you translate messages in 12+ Indian languages, summarize conversations, generate quick smart replies, assist with UPI transfers, or answer any questions!",
+                        timestamp = now - 300_000L,
+                        timeFormatted = timeFormat.format(Date(now - 300_000L)),
+                        isFromMe = false,
+                        status = "READ",
+                        isSeen = true,
+                        messageType = MessageType.TEXT.name
+                    )
+                )
+
+                // Aarav Sharma messages
+                messages.add(
+                    MessageEntity(
+                        id = "msg_as_1",
+                        chatId = "chat_aarav_sharma",
+                        senderId = "aarav_sharma",
+                        senderName = "Aarav Sharma",
+                        text = "Hey! Tested the VenzoInd WebRTC audio/video calling today. The 48kHz Opus clarity with AI noise cancelling is mind-blowing! 🎧",
+                        timestamp = now - 600_000L,
+                        timeFormatted = timeFormat.format(Date(now - 600_000L)),
+                        isFromMe = false,
+                        status = "READ",
+                        isSeen = true,
+                        messageType = MessageType.TEXT.name
+                    )
+                )
+                messages.add(
+                    MessageEntity(
+                        id = "msg_as_2",
+                        chatId = "chat_aarav_sharma",
+                        senderId = "me",
+                        senderName = "You",
+                        text = "Awesome! And the sovereign Kyber-1024 encryption ensures complete privacy across India. 🇮🇳",
+                        timestamp = now - 300_000L,
+                        timeFormatted = timeFormat.format(Date(now - 300_000L)),
+                        isFromMe = true,
+                        status = "READ",
+                        isSeen = true,
+                        messageType = MessageType.TEXT.name
+                    )
+                )
+                messages.add(
+                    MessageEntity(
+                        id = "msg_as_3",
+                        chatId = "chat_aarav_sharma",
+                        senderId = "aarav_sharma",
+                        senderName = "Aarav Sharma",
+                        text = "Let's connect on HD video call in 5 mins! 📞",
+                        timestamp = now - 180_000L,
+                        timeFormatted = timeFormat.format(Date(now - 180_000L)),
+                        isFromMe = false,
+                        status = "DELIVERED",
+                        isSeen = false,
+                        messageType = MessageType.TEXT.name
+                    )
+                )
+
+                // Aditi Rao messages
+                messages.add(
+                    MessageEntity(
+                        id = "msg_ar_1",
+                        chatId = "chat_aditi_rao",
+                        senderId = "aditi_rao",
+                        senderName = "Aditi Rao",
+                        text = "Hi! Can you settle the lunch bill via Bharat Pay UPI? ₹500",
+                        timestamp = now - 1200_000L,
+                        timeFormatted = timeFormat.format(Date(now - 1200_000L)),
+                        isFromMe = false,
+                        status = "READ",
+                        isSeen = true,
+                        messageType = MessageType.TEXT.name
+                    )
+                )
+                messages.add(
+                    MessageEntity(
+                        id = "msg_ar_2",
+                        chatId = "chat_aditi_rao",
+                        senderId = "me",
+                        senderName = "You",
+                        text = "Sent ₹500 via Bharat Pay Instant UPI! ⚡",
+                        timestamp = now - 950_000L,
+                        timeFormatted = timeFormat.format(Date(now - 950_000L)),
+                        isFromMe = true,
+                        status = "READ",
+                        isSeen = true,
+                        messageType = MessageType.UPI_PAYMENT.name,
+                        upiAmount = 500.0,
+                        upiTransactionId = "BHARAT-UPI-982103",
+                        upiStatus = "SUCCESS"
+                    )
+                )
+                messages.add(
+                    MessageEntity(
+                        id = "msg_ar_3",
+                        chatId = "chat_aditi_rao",
+                        senderId = "aditi_rao",
+                        senderName = "Aditi Rao",
+                        text = "💳 Received ₹500 via Bharat Pay UPI. Thank you!",
+                        timestamp = now - 900_000L,
+                        timeFormatted = timeFormat.format(Date(now - 900_000L)),
+                        isFromMe = false,
+                        status = "READ",
+                        isSeen = true,
+                        messageType = MessageType.TEXT.name
+                    )
+                )
+
+                // Dr. Priya's Organic Spices
+                messages.add(
+                    MessageEntity(
+                        id = "msg_ps_1",
+                        chatId = "chat_dr_priya_consult",
+                        senderId = "dr_priya",
+                        senderName = "Dr. Priya",
+                        text = "🛍️ Check our premium Kashmiri Saffron & Organic Cardamom!",
+                        timestamp = now - 7200_000L,
+                        timeFormatted = timeFormat.format(Date(now - 7200_000L)),
+                        isFromMe = false,
+                        status = "READ",
+                        isSeen = true,
+                        messageType = MessageType.CATALOGUE.name,
+                        catalogueTitle = "Pure Kashmiri Kesar (Saffron) 1g",
+                        cataloguePrice = 450.0,
+                        catalogueDescription = "100% Organic Grade A+ Mongra Saffron from Pampore, Kashmir.",
+                        catalogueCategory = "Spices",
+                        catalogueDiscountPercent = 15,
+                        upiAmount = 450.0
+                    )
+                )
+
+                messageDao.insertMessages(messages)
+            }
+
+            // 3. Seed Calls if empty
+            if (callDao.getCallsCount() == 0) {
+                val initialCalls = listOf(
+                    CallEntity(
+                        id = "call_seed_1",
+                        contactName = "Aarav Sharma",
+                        contactAvatar = "AS",
+                        isIncoming = true,
+                        isMissed = false,
+                        isVideo = false,
+                        timestamp = now - 3600_000L,
+                        timeFormatted = timeFormat.format(Date(now - 3600_000L)),
+                        durationStr = "4m 12s",
+                        qualityStr = "HD Voice • 48kHz • 18ms"
+                    ),
+                    CallEntity(
+                        id = "call_seed_2",
+                        contactName = "Aditi Rao",
+                        contactAvatar = "AR",
+                        isIncoming = false,
+                        isMissed = false,
+                        isVideo = true,
+                        timestamp = now - 7200_000L,
+                        timeFormatted = timeFormat.format(Date(now - 7200_000L)),
+                        durationStr = "12m 45s",
+                        qualityStr = "4K WebRTC • 60fps • 14ms"
+                    ),
+                    CallEntity(
+                        id = "call_seed_3",
+                        contactName = "Vikram Malhotra",
+                        contactAvatar = "VM",
+                        isIncoming = true,
+                        isMissed = true,
+                        isVideo = false,
+                        timestamp = now - 86400_000L,
+                        timeFormatted = "Yesterday",
+                        durationStr = "Missed Call",
+                        qualityStr = "Quantum Encrypted"
+                    )
+                )
+                initialCalls.forEach { callDao.insertCall(it) }
             }
         } catch (e: Exception) {
             // Ignore seeding errors

@@ -125,7 +125,13 @@ class FirestoreManager private constructor(private val context: Context) {
                     "expireTimeMillis" to message.expireTimeMillis,
                     "isStarred" to message.isStarred,
                     "replyToText" to (message.replyToText ?: ""),
-                    "replyToSender" to (message.replyToSender ?: "")
+                    "replyToSender" to (message.replyToSender ?: ""),
+                    "catalogueTitle" to (message.catalogueTitle ?: ""),
+                    "cataloguePrice" to (message.cataloguePrice ?: 0.0),
+                    "catalogueImageUrl" to (message.catalogueImageUrl ?: ""),
+                    "catalogueDescription" to (message.catalogueDescription ?: ""),
+                    "catalogueCategory" to (message.catalogueCategory ?: ""),
+                    "catalogueDiscountPercent" to (message.catalogueDiscountPercent ?: 0)
                 )
 
                 // Write to universal messages collection for global cross-device synchronization
@@ -321,7 +327,13 @@ class FirestoreManager private constructor(private val context: Context) {
                                         expireTimeMillis = doc.getLong("expireTimeMillis") ?: 0L,
                                         isStarred = doc.getBoolean("isStarred") ?: false,
                                         replyToText = doc.getString("replyToText"),
-                                        replyToSender = doc.getString("replyToSender")
+                                        replyToSender = doc.getString("replyToSender"),
+                                        catalogueTitle = doc.getString("catalogueTitle"),
+                                        cataloguePrice = doc.getDouble("cataloguePrice"),
+                                        catalogueImageUrl = doc.getString("catalogueImageUrl"),
+                                        catalogueDescription = doc.getString("catalogueDescription"),
+                                        catalogueCategory = doc.getString("catalogueCategory"),
+                                        catalogueDiscountPercent = doc.getLong("catalogueDiscountPercent")?.toInt()
                                     )
 
                                     // Ensure local contact exists

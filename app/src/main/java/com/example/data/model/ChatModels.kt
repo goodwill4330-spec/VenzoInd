@@ -16,7 +16,8 @@ enum class MessageType {
     FILE,
     POLL,
     SYSTEM_SECURITY,
-    LOCATION
+    LOCATION,
+    CATALOGUE
 }
 
 enum class MessageStatus {
@@ -26,6 +27,18 @@ enum class MessageStatus {
     SEEN,
     READ
 }
+
+data class CatalogueProduct(
+    val id: String,
+    val title: String,
+    val price: Double,
+    val originalPrice: Double? = null,
+    val discountPercent: Int = 0,
+    val category: String,
+    val description: String,
+    val imageUrl: String? = null,
+    val badge: String? = null
+)
 
 @Entity(tableName = "chats")
 data class ChatEntity(
@@ -82,7 +95,13 @@ data class MessageEntity(
     val expireTimeMillis: Long = 0L,
     val isStarred: Boolean = false,
     val replyToText: String? = null,
-    val replyToSender: String? = null
+    val replyToSender: String? = null,
+    val catalogueTitle: String? = null,
+    val cataloguePrice: Double? = null,
+    val catalogueImageUrl: String? = null,
+    val catalogueDescription: String? = null,
+    val catalogueCategory: String? = null,
+    val catalogueDiscountPercent: Int? = null
 )
 
 @Entity(tableName = "stories")

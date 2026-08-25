@@ -667,25 +667,49 @@ fun AuthScreen(
                         }
                     }
 
-                    // Next Button with Strict Validation
-                    Button(
-                        onClick = {
-                            val isValid = authViewModel.validateCurrentPhone()
-                            if (isValid) {
-                                showConfirmNumberDialog = true
-                            } else {
-                                val err = phoneValidationError ?: "Please enter a valid 10-digit Indian mobile number."
-                                Toast.makeText(context, err, Toast.LENGTH_LONG).show()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .testTag("auth_next_button"),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight)
+                    // Next Button and Quick Start
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Next", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = BharatWhite)
+                        Button(
+                            onClick = {
+                                val isValid = authViewModel.validateCurrentPhone()
+                                if (isValid) {
+                                    showConfirmNumberDialog = true
+                                } else {
+                                    val err = phoneValidationError ?: "Please enter a valid mobile number."
+                                    Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .testTag("auth_next_button"),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight)
+                        ) {
+                            Text("Next", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = BharatWhite)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                viewModel?.setLoggedIn(true)
+                                onLoginSuccess()
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("quick_start_button"),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color(0xFF334155)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BharatElectricCyan)
+                        ) {
+                            Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp), tint = BharatElectricCyan)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("⚡ Instant Demo Mode / Quick Start", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }

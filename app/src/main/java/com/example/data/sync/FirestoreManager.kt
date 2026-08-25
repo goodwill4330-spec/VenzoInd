@@ -263,12 +263,14 @@ class FirestoreManager private constructor(private val context: Context) {
                                 }
 
                                 // RECIPIENT SIDE: Verify if this message is intended for this device/phone
-                                val cleanMyPhone = currentUserPhone.replace("+", "").replace(" ", "").trim()
-                                val cleanTargetPhone = targetPhone.replace("+", "").replace(" ", "").trim()
+                                val cleanMyPhoneDigits = currentUserPhone.filter { it.isDigit() }.takeLast(10)
+                                val cleanTargetPhoneDigits = targetPhone.filter { it.isDigit() }.takeLast(10)
 
                                 val isTargetedToMe = targetDeviceId.isBlank() ||
                                         (myDeviceId.isNotBlank() && targetDeviceId == myDeviceId) ||
-                                        (cleanTargetPhone.isNotBlank() && cleanMyPhone.isNotBlank() && cleanTargetPhone == cleanMyPhone) ||
+                                        (cleanTargetPhoneDigits.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && cleanTargetPhoneDigits == cleanMyPhoneDigits) ||
+                                        (targetDeviceId.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && targetDeviceId.contains(cleanMyPhoneDigits)) ||
+                                        (myDeviceId.isNotBlank() && targetDeviceId.contains(myDeviceId)) ||
                                         targetDeviceId.startsWith("devika") || targetDeviceId.startsWith("aarav") ||
                                         targetDeviceId.startsWith("rahul") || targetDeviceId.startsWith("priya") ||
                                         targetDeviceId.startsWith("ananya") || targetDeviceId.startsWith("vikram") ||
@@ -527,18 +529,21 @@ class FirestoreManager private constructor(private val context: Context) {
                             val isRecent = Math.abs(now - timestamp) < 180000
 
                             if (isRecent) {
-                                val cleanMyPhone = currentUserPhone.replace("+", "").replace(" ", "").trim()
-                                val cleanCallerPhone = callerPhone.replace("+", "").replace(" ", "").trim()
+                                val cleanMyPhoneDigits = currentUserPhone.filter { it.isDigit() }.takeLast(10)
+                                val cleanCallerPhoneDigits = callerPhone.filter { it.isDigit() }.takeLast(10)
+                                val cleanReceiverPhoneDigits = receiverPhone.filter { it.isDigit() }.takeLast(10)
                                 
                                 val isMeCaller = if (callerDeviceId.isNotBlank() && myDeviceId.isNotBlank()) {
                                     callerDeviceId == myDeviceId
                                 } else {
-                                    (cleanCallerPhone.isNotBlank() && cleanMyPhone.isNotBlank() && cleanCallerPhone == cleanMyPhone) ||
+                                    (cleanCallerPhoneDigits.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && cleanCallerPhoneDigits == cleanMyPhoneDigits) ||
                                     (callerId.isNotBlank() && callerId == currentUserPhone)
                                 }
 
                                 val isTargetedToMe = targetDeviceId.isBlank() ||
                                         (myDeviceId.isNotBlank() && targetDeviceId == myDeviceId) ||
+                                        (cleanReceiverPhoneDigits.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && cleanReceiverPhoneDigits == cleanMyPhoneDigits) ||
+                                        (targetDeviceId.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && targetDeviceId.contains(cleanMyPhoneDigits)) ||
                                         targetDeviceId.startsWith("devika") || targetDeviceId.startsWith("aarav") ||
                                         targetDeviceId.startsWith("rahul") || targetDeviceId.startsWith("priya") ||
                                         targetDeviceId.startsWith("ananya") || targetDeviceId.startsWith("vikram") ||
@@ -549,8 +554,7 @@ class FirestoreManager private constructor(private val context: Context) {
                                         receiverName.contains("Devika", ignoreCase = true) ||
                                         receiverName.contains("Aarav", ignoreCase = true) ||
                                         receiverName.contains("Rahul", ignoreCase = true) ||
-                                        receiverName.equals(currentUserName, ignoreCase = true) ||
-                                        (receiverPhone.isNotBlank() && (receiverPhone == currentUserPhone || receiverPhone.replace("+", "").replace(" ", "") == cleanMyPhone))
+                                        receiverName.equals(currentUserName, ignoreCase = true)
 
                                 if (!isMeCaller && isTargetedToMe && status == "RINGING") {
                                     onIncomingCall(callId, callerName, callerAvatar, isVideo)

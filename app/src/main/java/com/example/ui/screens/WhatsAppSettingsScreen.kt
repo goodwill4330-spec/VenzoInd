@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.ui.components.ChatTransferDialog
 import com.example.ui.components.GlassCard
 import com.example.ui.components.TricolorGlowPill
 import com.example.ui.components.VerifiedBadge
@@ -95,6 +96,7 @@ fun WhatsAppSettingsScreen(
     var showTwoStepDialog by remember { mutableStateOf(false) }
     var twoStepPinInput by remember { mutableStateOf("") }
     var showStorageDetailsSheet by remember { mutableStateOf(false) }
+    var showChatTransferDialog by remember { mutableStateOf(false) }
 
     BackHandler(enabled = currentSubScreen != SettingsSubScreen.MAIN) {
         currentSubScreen = SettingsSubScreen.MAIN
@@ -248,6 +250,7 @@ fun WhatsAppSettingsScreen(
                             fontSize = selectedFontSize,
                             onThemeClick = { showThemeDialog = true },
                             onBackupClick = { viewModel.showBackupRestoreDialog.value = true },
+                            onTransferChatsClick = { showChatTransferDialog = true },
                             onClearChatsClick = { showClearChatsDialog = true },
                             onClearDemoDataClick = { showClearAllDemoDialog = true }
                         )
@@ -590,6 +593,13 @@ fun WhatsAppSettingsScreen(
                     }
                 },
                 containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurface
+            )
+        }
+
+        if (showChatTransferDialog) {
+            ChatTransferDialog(
+                viewModel = viewModel,
+                onDismiss = { showChatTransferDialog = false }
             )
         }
 
@@ -1182,6 +1192,7 @@ private fun ChatsSettingsContent(
     fontSize: String,
     onThemeClick: () -> Unit,
     onBackupClick: () -> Unit,
+    onTransferChatsClick: () -> Unit,
     onClearChatsClick: () -> Unit,
     onClearDemoDataClick: () -> Unit
 ) {
@@ -1279,7 +1290,7 @@ private fun ChatsSettingsContent(
                 icon = Icons.Outlined.PhoneForwarded,
                 title = "Transfer chats",
                 subtitle = "Transfer chats to another phone seamlessly",
-                onClick = { Toast.makeText(context, "Multi-phone chat transfer active", Toast.LENGTH_SHORT).show() },
+                onClick = onTransferChatsClick,
                 bColors = bColors
             )
             WhatsAppSettingRow(

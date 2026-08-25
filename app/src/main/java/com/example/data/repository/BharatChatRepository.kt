@@ -143,10 +143,17 @@ class BharatChatRepository(
             try {
                 val devId = com.example.data.local.UserProfileDataStore(ctx).getDeviceId()
                 val targetDev = if (chatId.startsWith("chat_")) chatId.removePrefix("chat_") else ""
+                var targetPhone = ""
+                val contact = contactDao.getContactById(if (chatId.startsWith("chat_")) "contact_${chatId.removePrefix("chat_")}" else "contact_$chatId")
+                    ?: contactDao.getContactById(chatId)
+                if (contact != null && contact.phone.isNotBlank()) {
+                    targetPhone = contact.phone
+                }
                 FirestoreManager.getInstance(ctx).syncMessageToCloud(
                     message = message,
                     senderDeviceId = devId,
-                    targetDeviceId = targetDev
+                    targetDeviceId = targetDev,
+                    targetPhone = targetPhone
                 )
             } catch (e: Exception) {
                 // Resilient local persistence

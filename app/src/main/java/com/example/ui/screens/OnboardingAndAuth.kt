@@ -327,17 +327,6 @@ fun AuthScreen(
     var showConfirmNumberDialog by remember { mutableStateOf(false) }
     val focusRequesters = remember { List(6) { FocusRequester() } }
 
-    // SIM card detection permissions launcher
-    val simPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val granted = permissions.values.any { it }
-        if (granted) {
-            authViewModel.refreshSimCards(context)
-            Toast.makeText(context, "SIM Cards detected from device", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     // Profile Setup states
     var userNameInput by remember { mutableStateOf("VenzoInd User") }
     var userStatusInput by remember { mutableStateOf("Hey there! I am using VenzoInd.") }
@@ -612,12 +601,8 @@ fun AuthScreen(
 
                                     TextButton(
                                         onClick = {
-                                            simPermissionLauncher.launch(
-                                                arrayOf(
-                                                    android.Manifest.permission.READ_PHONE_STATE,
-                                                    android.Manifest.permission.READ_PHONE_NUMBERS
-                                                )
-                                            )
+                                            authViewModel.refreshSimCards(context)
+                                            Toast.makeText(context, "Scanning active network...", Toast.LENGTH_SHORT).show()
                                         },
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                     ) {

@@ -1,13 +1,7 @@
 package com.example.util
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
-import android.telephony.SubscriptionInfo
-import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
-import androidx.core.content.ContextCompat
 
 data class DetectedSim(
     val slotIndex: Int,
@@ -68,110 +62,33 @@ object SimCardHelper {
     }
 
     /**
-     * Reads all active SIM cards in the device
+     * Reads active network carrier without requiring sensitive SMS or Phone state permissions
      */
     fun getActiveSimCards(context: Context): List<DetectedSim> {
         val simList = mutableListOf<DetectedSim>()
 
         try {
-            val hasPhoneStatePermission = ContextCompat.checkSelfPermission(
-                context, Manifest.permission.READ_PHONE_STATE
-            ) == PackageManager.PERMISSION_GRANTED
+            val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+            val carrier = telephonyManager?.networkOperatorName?.takeIf { it.isNotBlank() }
+                ?: telephonyManager?.simOperatorName?.takeIf { it.isNotBlank() }
+                ?: "Active SIM (Network)"
+            val country = telephonyManager?.simCountryIso?.uppercase()?.takeIf { it.isNotBlank() } ?: "IN"
 
-            val hasPhoneNumbersPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                ContextCompat.checkSelfPermission(
-                    context, Manifest.permission.READ_PHONE_NUMBERS
-                ) == PackageManager.PERMISSION_GRANTED
-            } else {
-                hasPhoneStatePermission
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1 && (hasPhoneStatePermission || hasPhoneNumbersPermission)) {
-                val subscriptionManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
-                val subList: List<SubscriptionInfo>? = subscriptionManager?.activeSubscriptionInfoList
-
-                if (!subList.isNullOrEmpty()) {
-                    subList.forEachIndexed { index, info ->
-                        var rawNumber: String? = null
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && hasPhoneNumbersPermission) {
-                            try {
-                                rawNumber = subscriptionManager.getPhoneNumber(info.subscriptionId)
-                            } catch (e: Exception) {
-                                rawNumber = info.number
-                            }
-                        } else {
-                            rawNumber = info.number
-                        }
-
-                        // Clean number if present
-                        val cleanPhone = if (!rawNumber.isNullOrBlank()) {
-                            val digits = rawNumber.filter { it.isDigit() }
-                            if (digits.length >= 10) digits.takeLast(10) else null
-                        } else null
-
-                        val carrier = info.carrierName?.toString()?.takeIf { it.isNotBlank() }
-                            ?: info.displayName?.toString()?.takeIf { it.isNotBlank() }
-                            ?: "SIM ${info.simSlotIndex + 1}"
-
-                        simList.add(
-                            DetectedSim(
-                                slotIndex = info.simSlotIndex,
-                                carrierName = carrier,
-                                phoneNumber = cleanPhone,
-                                countryIso = info.countryIso?.uppercase() ?: "IN",
-                                displayName = "SIM ${info.simSlotIndex + 1}: $carrier",
-                                isDefault = index == 0
-                            )
-                        )
-                    }
-                }
-            }
+            simList.add(
+                DetectedSim(
+                    slotIndex = 0,
+                    carrierName = carrier,
+                    phoneNumber = null,
+                    countryIso = country,
+                    displayName = "SIM 1: $carrier",
+                    isDefault = true
+                )
+            )
         } catch (e: Exception) {
-            // SubscriptionManager fallback
-        }
-
-        // If no SIM found through SubscriptionManager (e.g. permission pending or single SIM without SubscriptionInfo)
-        if (simList.isEmpty()) {
-            try {
-                val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-                val simState = telephonyManager?.simState
-                val carrier = telephonyManager?.networkOperatorName?.takeIf { it.isNotBlank() }
-                    ?: telephonyManager?.simOperatorName?.takeIf { it.isNotBlank() }
-                    ?: "Primary SIM"
-                val country = telephonyManager?.simCountryIso?.uppercase()?.takeIf { it.isNotBlank() } ?: "IN"
-
-                var phone: String? = null
-                val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
-                if (hasPerm) {
-                    try {
-                        @Suppress("DEPRECATION")
-                        val line1 = telephonyManager?.line1Number
-                        if (!line1.isNullOrBlank()) {
-                            val digits = line1.filter { it.isDigit() }
-                            if (digits.length >= 10) phone = digits.takeLast(10)
-                        }
-                    } catch (e: Exception) {
-                        // ignore
-                    }
-                }
-
-                if (simState == TelephonyManager.SIM_STATE_READY || carrier != "Primary SIM") {
-                    simList.add(
-                        DetectedSim(
-                            slotIndex = 0,
-                            carrierName = carrier,
-                            phoneNumber = phone,
-                            countryIso = country,
-                            displayName = "SIM 1: $carrier",
-                            isDefault = true
-                        )
-                    )
-                }
-            } catch (e: Exception) {
-                // ignore
-            }
+            // ignore
         }
 
         return simList
     }
 }
+

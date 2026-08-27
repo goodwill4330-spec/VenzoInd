@@ -104,19 +104,24 @@ class FirestoreManager private constructor(private val context: Context) {
         message: MessageEntity,
         senderDeviceId: String = "",
         targetDeviceId: String = "",
-        targetPhone: String = ""
+        targetPhone: String = "",
+        senderPhone: String = ""
     ) {
         val db = firestoreInstance ?: return
         scope.launch {
             try {
+                val cleanSenderPhone = senderPhone.filter { it.isDigit() }.takeLast(10)
+                val cleanTargetPhone = targetPhone.filter { it.isDigit() }.takeLast(10)
+
                 val messageMap = hashMapOf(
                     "id" to message.id,
                     "chatId" to message.chatId,
                     "senderId" to message.senderId,
                     "senderName" to message.senderName,
+                    "senderPhone" to cleanSenderPhone,
                     "senderDeviceId" to senderDeviceId,
                     "targetDeviceId" to targetDeviceId,
-                    "targetPhone" to targetPhone,
+                    "targetPhone" to cleanTargetPhone,
                     "text" to message.text,
                     "timestamp" to message.timestamp,
                     "timeFormatted" to message.timeFormatted,
@@ -167,7 +172,9 @@ class FirestoreManager private constructor(private val context: Context) {
                     "lastMessageStatus" to message.status,
                     "lastSenderName" to message.senderName,
                     "lastSenderId" to message.senderId,
-                    "lastSenderDeviceId" to senderDeviceId
+                    "lastSenderDeviceId" to senderDeviceId,
+                    "lastSenderPhone" to cleanSenderPhone,
+                    "lastTargetPhone" to cleanTargetPhone
                 )
                 db.collection("chats")
                     .document(message.chatId)
@@ -250,8 +257,15 @@ class FirestoreManager private constructor(private val context: Context) {
                                 val seenTimestamp = doc.getLong("seenTimestamp")
                                 val seenTimeFormatted = doc.getString("seenTimeFormatted")
 
+                                val senderPhone = doc.getString("senderPhone") ?: ""
+                                val cleanSenderPhoneDigits = senderPhone.filter { it.isDigit() }.takeLast(10)
+                                val cleanMyPhoneDigits = currentUserPhone.filter { it.isDigit() }.takeLast(10)
+                                val cleanTargetPhoneDigits = targetPhone.filter { it.isDigit() }.takeLast(10)
+
                                 val isFromMe = if (senderDeviceId.isNotBlank() && myDeviceId.isNotBlank()) {
                                     senderDeviceId == myDeviceId
+                                } else if (cleanSenderPhoneDigits.isNotBlank() && cleanMyPhoneDigits.isNotBlank()) {
+                                    cleanSenderPhoneDigits == cleanMyPhoneDigits
                                 } else {
                                     (senderId == currentUserId && currentUserId.isNotBlank() && currentUserId != "unknown") ||
                                     (senderName.isNotBlank() && currentUserName.isNotBlank() && !currentUserName.equals("VenzoInd User", ignoreCase = true) && senderName.equals(currentUserName, ignoreCase = true))
@@ -281,18 +295,10 @@ class FirestoreManager private constructor(private val context: Context) {
                                 }
 
                                 // RECIPIENT SIDE: Verify if this message is intended for this device/phone
-                                val cleanMyPhoneDigits = currentUserPhone.filter { it.isDigit() }.takeLast(10)
-                                val cleanTargetPhoneDigits = targetPhone.filter { it.isDigit() }.takeLast(10)
-
-                                val isTargetedToMe = targetDeviceId.isBlank() ||
-                                        (myDeviceId.isNotBlank() && targetDeviceId == myDeviceId) ||
-                                        (cleanTargetPhoneDigits.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && cleanTargetPhoneDigits == cleanMyPhoneDigits) ||
+                                val isTargetedToMe = (cleanTargetPhoneDigits.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && cleanTargetPhoneDigits == cleanMyPhoneDigits) ||
+                                        (myDeviceId.isNotBlank() && targetDeviceId.isNotBlank() && (targetDeviceId == myDeviceId || targetDeviceId.contains(myDeviceId))) ||
                                         (targetDeviceId.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && targetDeviceId.contains(cleanMyPhoneDigits)) ||
-                                        (myDeviceId.isNotBlank() && targetDeviceId.contains(myDeviceId)) ||
-                                        targetDeviceId.startsWith("devika") || targetDeviceId.startsWith("aarav") ||
-                                        targetDeviceId.startsWith("rahul") || targetDeviceId.startsWith("priya") ||
-                                        targetDeviceId.startsWith("ananya") || targetDeviceId.startsWith("vikram") ||
-                                        targetDeviceId.startsWith("contact_") || targetDeviceId.startsWith("chat_")
+                                        (targetDeviceId.isBlank() && targetPhone.isBlank())
 
                                 if (!isTargetedToMe) continue
 
@@ -564,25 +570,14 @@ class FirestoreManager private constructor(private val context: Context) {
                                     (callerId.isNotBlank() && callerId == currentUserPhone)
                                 }
 
-                                val isTargetedToMe = targetDeviceId.isBlank() ||
-                                        (myDeviceId.isNotBlank() && targetDeviceId == myDeviceId) ||
-                                        (cleanReceiverPhoneDigits.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && cleanReceiverPhoneDigits == cleanMyPhoneDigits) ||
+                                val isTargetedToMe = (cleanReceiverPhoneDigits.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && cleanReceiverPhoneDigits == cleanMyPhoneDigits) ||
+                                        (myDeviceId.isNotBlank() && targetDeviceId.isNotBlank() && (targetDeviceId == myDeviceId || targetDeviceId.contains(myDeviceId))) ||
                                         (targetDeviceId.isNotBlank() && cleanMyPhoneDigits.isNotBlank() && targetDeviceId.contains(cleanMyPhoneDigits)) ||
-                                        targetDeviceId.startsWith("devika") || targetDeviceId.startsWith("aarav") ||
-                                        targetDeviceId.startsWith("rahul") || targetDeviceId.startsWith("priya") ||
-                                        targetDeviceId.startsWith("ananya") || targetDeviceId.startsWith("vikram") ||
-                                        targetDeviceId.startsWith("contact_") || targetDeviceId.startsWith("chat_") ||
-                                        receiverName.isBlank() ||
-                                        receiverName.equals("All", ignoreCase = true) ||
-                                        receiverName.contains("Venzo", ignoreCase = true) ||
-                                        receiverName.contains("Devika", ignoreCase = true) ||
-                                        receiverName.contains("Aarav", ignoreCase = true) ||
-                                        receiverName.contains("Rahul", ignoreCase = true) ||
-                                        receiverName.equals(currentUserName, ignoreCase = true)
+                                        (receiverName.isNotBlank() && currentUserName.isNotBlank() && receiverName.equals(currentUserName, ignoreCase = true))
 
                                 if (!isMeCaller && isTargetedToMe && status == "RINGING") {
                                     onIncomingCall(callId, callerName, callerAvatar, isVideo)
-                                } else if (isMeCaller || status != "RINGING") {
+                                } else if (isMeCaller || (isTargetedToMe && status != "RINGING")) {
                                     onCallStatusChange(callId, status)
                                 }
                             }

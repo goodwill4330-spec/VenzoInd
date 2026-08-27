@@ -112,23 +112,32 @@ fun ContactsListScreen(
 
     // Computed real-time presence mapping
     fun getPresence(contact: ContactEntity): ContactPresence {
+        // Unregistered device contacts from phonebook must NEVER show green online dot
+        if (!contact.isBharatChatUser) {
+            return ContactPresence.OFFLINE
+        }
+
         val targetDevId = contact.id.removePrefix("contact_")
         val cleanPhone = contact.phone.filter { it.isDigit() }.takeLast(10)
 
-        val inMemoryOnline: Boolean = onlineUsersMap[targetDevId]
+        val inMemoryOnline: Boolean? = onlineUsersMap[targetDevId]
             ?: onlineUsersMap[contact.phone]
             ?: (if (cleanPhone.isNotBlank()) onlineUsersMap[cleanPhone] else null)
-            ?: contact.isOnline
 
         val lastSeen: Long = usersLastSeenMap[targetDevId]
             ?: usersLastSeenMap[contact.phone]
             ?: (if (cleanPhone.isNotBlank()) usersLastSeenMap[cleanPhone] else null)
             ?: contact.lastSeenTimestamp
 
+        if (lastSeen <= 0L && inMemoryOnline != true) {
+            return ContactPresence.OFFLINE
+        }
+
         val diffMs = System.currentTimeMillis() - lastSeen
         return when {
-            inMemoryOnline || diffMs <= 90_000L -> ContactPresence.ONLINE
-            diffMs <= 1800_000L -> ContactPresence.AWAY
+            inMemoryOnline == true && diffMs <= 120_000L -> ContactPresence.ONLINE
+            diffMs <= 90_000L -> ContactPresence.ONLINE
+            diffMs <= 600_000L -> ContactPresence.AWAY
             contact.statusMsg.contains("Busy", ignoreCase = true) ||
             contact.statusMsg.contains("Meeting", ignoreCase = true) -> ContactPresence.BUSY
             else -> ContactPresence.OFFLINE

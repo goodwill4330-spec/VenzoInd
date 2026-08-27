@@ -173,7 +173,9 @@ class BharatChatRepository(
         // Sync to cloud Firestore in real-time
         context?.let { ctx ->
             try {
-                val devId = com.example.data.local.UserProfileDataStore(ctx).getDeviceId()
+                val dataStore = com.example.data.local.UserProfileDataStore(ctx)
+                val devId = dataStore.getDeviceId()
+                val myPhone = dataStore.getPhone()
                 val chatObj = chatDao.getChatById(chatId)
                 val targetDev = if (chatId.startsWith("chat_")) chatId.removePrefix("chat_") else ""
                 var targetPhone = ""
@@ -196,7 +198,8 @@ class BharatChatRepository(
                     message = message,
                     senderDeviceId = devId,
                     targetDeviceId = targetDev,
-                    targetPhone = targetPhone
+                    targetPhone = targetPhone,
+                    senderPhone = myPhone
                 )
             } catch (e: Exception) {
                 // Resilient local persistence

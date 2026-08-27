@@ -547,10 +547,10 @@ fun AuthScreen(
                                 ),
                                 keyboardActions = KeyboardActions(
                                     onDone = {
-                                        if (authViewModel.validateCurrentPhone()) {
+                                        if (authViewModel.validateCurrentPhone(context)) {
                                             showConfirmNumberDialog = true
                                         } else {
-                                            Toast.makeText(context, phoneValidationError ?: "Invalid phone number", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, phoneValidationError ?: "कृपया इसी मोबाइल के सिम कार्ड का नंबर दर्ज करें।", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 ),
@@ -591,7 +591,7 @@ fun AuthScreen(
                                         Icon(Icons.Default.SimCard, contentDescription = null, tint = BharatGreenLight, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "DEVICE SIM DETECTED",
+                                            text = "डिवाइस सिम कार्ड (VERIFIED SIM)",
                                             fontSize = 11.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = BharatGreenLight,
@@ -606,7 +606,7 @@ fun AuthScreen(
                                         },
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                     ) {
-                                        Text("Detect SIM", fontSize = 11.5.sp, color = BharatElectricCyan, fontWeight = FontWeight.SemiBold)
+                                        Text("Scan SIM", fontSize = 11.5.sp, color = BharatElectricCyan, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
 
@@ -647,9 +647,9 @@ fun AuthScreen(
                                                         )
                                                     } else {
                                                         Text(
-                                                            text = "Tap to use this SIM",
+                                                            text = "✅ इस सिम से सक्रिय करें",
                                                             fontSize = 10.5.sp,
-                                                            color = BharatElectricCyan
+                                                            color = BharatGreenLight
                                                         )
                                                     }
                                                 }
@@ -658,7 +658,7 @@ fun AuthScreen(
                                     }
                                 } else {
                                     Text(
-                                        text = "Insert active SIM card into mobile for 1-tap verification.",
+                                        text = "⚠️ केवल उसी नंबर से अकाउंट एक्टिवेट होगा जिसकी सिम इस फ़ोन में लगी है।",
                                         fontSize = 11.5.sp,
                                         color = TextSecondaryDark
                                     )
@@ -667,7 +667,7 @@ fun AuthScreen(
                         }
                     }
 
-                    // Next Button and Quick Start
+                    // Next Button (SIM Card Check Enforced)
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -675,11 +675,11 @@ fun AuthScreen(
                     ) {
                         Button(
                             onClick = {
-                                val isValid = authViewModel.validateCurrentPhone()
+                                val isValid = authViewModel.validateCurrentPhone(context)
                                 if (isValid) {
                                     showConfirmNumberDialog = true
                                 } else {
-                                    val err = phoneValidationError ?: "Please enter a valid mobile number."
+                                    val err = phoneValidationError ?: "कृपया इसी फ़ोन में लगे सिम कार्ड का नंबर दर्ज करें।"
                                     Toast.makeText(context, err, Toast.LENGTH_LONG).show()
                                 }
                             },
@@ -690,25 +690,9 @@ fun AuthScreen(
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = BharatGreenLight)
                         ) {
-                            Text("Next", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = BharatWhite)
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                viewModel?.setLoggedIn(true)
-                                onLoginSuccess()
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp)
-                                .testTag("quick_start_button"),
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, Color(0xFF334155)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BharatElectricCyan)
-                        ) {
-                            Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp), tint = BharatElectricCyan)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("⚡ Instant Demo Mode / Quick Start", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = BharatWhite, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("वेरीफाई और आगे बढ़ें (Verify SIM)", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = BharatWhite)
                         }
                     }
                 }
@@ -728,7 +712,7 @@ fun AuthScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = "Verifying your number",
+                            text = "सिम और नंबर सत्यापन",
                             fontSize = 22.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = BharatWhite,
@@ -738,7 +722,7 @@ fun AuthScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "Waiting to detect an SMS sent to\n${selectedCountry.flag} $fullE164",
+                            text = "इस मोबाइल में लगे सिम (${selectedCountry.flag} $fullE164) पर 6-अंकों का SMS कोड भेजा गया है।",
                             fontSize = 13.5.sp,
                             color = TextSecondaryDark,
                             textAlign = TextAlign.Center,
@@ -750,99 +734,34 @@ fun AuthScreen(
                             contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.testTag("wrong_number_button")
                         ) {
-                            Text("Wrong number? Edit", color = BharatGreenLight, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("गलत नंबर? बदलें (Edit Number)", color = BharatGreenLight, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Status Info Pill (Auth Handshake Feedback)
-                        val statusText = when (authStatus) {
-                            is PhoneAuthStatus.SendingCode -> "📡 Preparing verification code..."
-                            is PhoneAuthStatus.CodeSent -> "✅ Verification code ready for $fullE164"
-                            is PhoneAuthStatus.AutoVerified -> "⚡ Instant Auto-Detection Verified!"
-                            is PhoneAuthStatus.Error -> (authStatus as PhoneAuthStatus.Error).message
-                            else -> "⚡ High-Speed OTP Delivery Active"
-                        }
+                        // Status Info Pill
                         Surface(
                             shape = RoundedCornerShape(20.dp),
                             color = Color(0xFF1E293B),
                             border = BorderStroke(1.dp, Color(0xFF334155)),
                             modifier = Modifier.padding(bottom = 12.dp)
                         ) {
-                            Text(
-                                text = statusText,
-                                fontSize = 11.5.sp,
-                                color = if (authStatus is PhoneAuthStatus.Error) Color(0xFFEF4444) else BharatGreenLight,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                                textAlign = TextAlign.Center
-                            )
-                        }
-
-                        // High Visibility OTP Banner & 1-Tap Autofill
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color(0x3310B981),
-                            border = BorderStroke(1.5.dp, BharatGreenLight),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    authViewModel.fillOtp(generatedBackupOtp)
-                                    Toast.makeText(context, "Verification code $generatedBackupOtp auto-filled!", Toast.LENGTH_SHORT).show()
-                                }
-                                .testTag("sms_autofill_card")
-                        ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(BharatGreenLight.copy(alpha = 0.2f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.MarkEmailRead, contentDescription = null, tint = BharatGreenLight, modifier = Modifier.size(22.dp))
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "Verification Code: ",
-                                            fontSize = 12.sp,
-                                            color = TextSecondaryDark
-                                        )
-                                        Text(
-                                            text = generatedBackupOtp,
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = BharatGreenLight,
-                                            letterSpacing = 2.sp
-                                        )
-                                    }
-                                    Text(
-                                        text = "⚡ Tap here to 1-click auto-fill",
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = BharatElectricCyan
-                                    )
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = BharatGreenLight
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "डिवाइस पर SMS ऑटो-डिटेक्शन सक्रिय है...",
+                                    fontSize = 11.5.sp,
                                     color = BharatGreenLight,
-                                    modifier = Modifier.clickable {
-                                        authViewModel.fillOtp(generatedBackupOtp)
-                                        Toast.makeText(context, "Code inserted!", Toast.LENGTH_SHORT).show()
-                                    }
-                                ) {
-                                    Text(
-                                        text = "FILL",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = BharatWhite,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                    )
-                                }
+                                    textAlign = TextAlign.Center
+                                )
                             }
                         }
 

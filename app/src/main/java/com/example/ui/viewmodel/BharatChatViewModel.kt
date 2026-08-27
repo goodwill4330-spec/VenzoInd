@@ -1171,17 +1171,6 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                             webrtcLatencyMs = 18,
                             webrtcBitrateKbps = if (isVideo) 2850 else 320
                         )
-                        viewModelScope.launch {
-                            delay(400)
-                            val greeting = when {
-                                safeName.contains("Priya", ignoreCase = true) -> "Namaste! Dr. Priya here. I can hear you loud and clear on Bharat HD call."
-                                safeName.contains("Rohan", ignoreCase = true) -> "Hey! Rohan here. Bharat HD call quality is crystal clear!"
-                                safeName.contains("Deb", ignoreCase = true) || safeName.contains("Debashish", ignoreCase = true) -> "Namaste! Debashish here. Your call is connected securely on Bharat HD Voice."
-                                safeName.contains("AI", ignoreCase = true) -> "Namaste! Bharat AI Copilot voice channel is active and connected."
-                                else -> "Namaste! Call is connected with $safeName on Bharat Secure HD Voice. I can hear you clearly."
-                            }
-                            ttsManager.speakText(greeting)
-                        }
                     } else if (status == "DECLINED" || status == "ENDED") {
                         endCall(notifyCloud = false)
                     }
@@ -1193,32 +1182,18 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
 
         callTimerJob?.cancel()
         callTimerJob = viewModelScope.launch {
-            var waited = 0
-            while (!_activeCallState.value.isConnected && waited < 3) {
+            var ringingTimeSeconds = 0
+            // Wait for real recipient response (ringing state)
+            while (!_activeCallState.value.isConnected && ringingTimeSeconds < 45) {
                 delay(1000)
-                waited++
+                ringingTimeSeconds++
             }
             if (!_activeCallState.value.isConnected) {
-                // Auto-connect call for seamless testing and local contact simulation
-                ttsManager.stopCallTones()
-                ttsManager.playCallConnectedTone()
-                _activeCallState.value = _activeCallState.value.copy(
-                    isConnected = true,
-                    webrtcLatencyMs = 22,
-                    webrtcBitrateKbps = if (isVideo) 2900 else 320
-                )
-                viewModelScope.launch {
-                    delay(400)
-                    val greeting = when {
-                        safeName.contains("Priya", ignoreCase = true) -> "Namaste! Dr. Priya here. I can hear you loud and clear on Bharat HD call."
-                        safeName.contains("Rohan", ignoreCase = true) -> "Hey! Rohan here. Bharat HD call quality is crystal clear!"
-                        safeName.contains("Deb", ignoreCase = true) || safeName.contains("Debashish", ignoreCase = true) -> "Namaste! Debashish here. Your call is connected securely on Bharat HD Voice."
-                        safeName.contains("AI", ignoreCase = true) -> "Namaste! Bharat AI Copilot voice channel is active and connected."
-                        else -> "Namaste! Call is connected with $safeName on Bharat Secure HD Voice. I can hear you clearly."
-                    }
-                    ttsManager.speakText(greeting)
-                }
+                // If not answered after 45s, end call as unanswered
+                endCall(notifyCloud = true)
+                return@launch
             }
+            // Once connected, count real call duration
             while (true) {
                 delay(1000)
                 val current = _activeCallState.value

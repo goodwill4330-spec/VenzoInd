@@ -283,7 +283,8 @@ class ContactProvider private constructor(
                     isFavorite = false,
                     publicKeyFingerprint = "KYBER-1024-DEF78A",
                     lastSeenTimestamp = 0L,
-                    profilePicUri = devContact.photoUri
+                    profilePicUri = devContact.photoUri,
+                    isOnline = false
                 )
                 finalContacts.add(entity)
             }
@@ -305,7 +306,9 @@ class ContactProvider private constructor(
                 val cloudColor = user["avatarColorHex"] as? String ?: colors.random()
                 val cloudAvatar = user["avatarInitial"] as? String ?: userName.take(2).uppercase()
                 val cloudUpi = user["upiVpa"] as? String ?: ""
-                val lastSeen = (user["lastSeen"] as? Long) ?: System.currentTimeMillis()
+                val lastSeen = (user["lastSeen"] as? Long) ?: 0L
+                val isOnlineVal = (user["isOnline"] as? Boolean) ?: false
+                val isActuallyOnline = isOnlineVal && (System.currentTimeMillis() - lastSeen < 120_000L)
 
                 val targetId = if (userDevId.isNotBlank()) userDevId else userName.lowercase().replace(" ", "_")
                 val contactId = "contact_$targetId"
@@ -314,7 +317,7 @@ class ContactProvider private constructor(
                 val entity = ContactEntity(
                     id = contactId,
                     name = userName,
-                    phone = if (userPhone.isNotBlank()) userPhone else "+91 98000 00000",
+                    phone = if (userPhone.isNotBlank()) userPhone else "",
                     upiVpa = cloudUpi,
                     avatarInitial = cloudAvatar,
                     avatarColorHex = cloudColor,
@@ -322,7 +325,8 @@ class ContactProvider private constructor(
                     isBharatChatUser = true,
                     isFavorite = false,
                     publicKeyFingerprint = "KYBER-1024-${UUID.randomUUID().toString().take(6).uppercase()}",
-                    lastSeenTimestamp = lastSeen
+                    lastSeenTimestamp = lastSeen,
+                    isOnline = isActuallyOnline
                 )
                 finalContacts.add(entity)
 
@@ -334,10 +338,10 @@ class ContactProvider private constructor(
                         subtitle = cloudBio,
                         avatarInitial = cloudAvatar,
                         avatarColorHex = cloudColor,
-                        isOnline = true,
-                        lastMessage = "Connected on VenzoInd 🟢",
-                        lastMessageTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()),
-                        timestamp = System.currentTimeMillis()
+                        isOnline = isActuallyOnline,
+                        lastMessage = if (isActuallyOnline) "Online on VenzoInd 🟢" else "Connected on VenzoInd",
+                        lastMessageTime = if (lastSeen > 0L) SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(lastSeen)) else "",
+                        timestamp = if (lastSeen > 0L) lastSeen else System.currentTimeMillis()
                     )
                     appDatabase.chatDao().insertChat(newChat)
                 }

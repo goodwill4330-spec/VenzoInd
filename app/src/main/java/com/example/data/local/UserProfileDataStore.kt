@@ -41,6 +41,10 @@ class UserProfileDataStore(private val context: Context) {
         return id
     }
 
+    fun getPhone(): String {
+        return sharedPrefs.getString("user_saved_phone", "") ?: ""
+    }
+
     val isLoggedInFlow: Flow<Boolean> = context.userDataStore.data
         .catch { exception ->
             if (exception is IOException) {
@@ -98,6 +102,7 @@ class UserProfileDataStore(private val context: Context) {
     ) {
         val finalName = if (displayName.isNotBlank()) displayName else name
         val finalAvatarIndex = if (avatarIndex != 0 || customAvatarIndex == 0) avatarIndex else customAvatarIndex
+        sharedPrefs.edit().putString("user_saved_phone", phone).apply()
         context.userDataStore.edit { preferences ->
             preferences[PreferenceKeys.IS_LOGGED_IN] = true
             preferences[PreferenceKeys.DISPLAY_NAME] = finalName

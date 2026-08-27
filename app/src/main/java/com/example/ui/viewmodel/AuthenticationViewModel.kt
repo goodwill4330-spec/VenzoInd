@@ -148,18 +148,19 @@ class AuthenticationViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
-    fun validateCurrentPhone(): Boolean {
+    fun validateCurrentPhone(context: Context? = null): Boolean {
+        val appContext = context ?: getApplication<Application>()
         val country = _selectedCountry.value
         val raw = _phoneNumberInput.value
         val cleanNational = cleanPhoneNumber(raw, country.code)
 
         if (country.code == "+91") {
-            val error = SimCardHelper.validateIndianMobileNumber(cleanNational)
+            val (isValidSim, error) = SimCardHelper.verifySimInDevice(appContext, cleanNational, _selectedSim.value)
             _phoneValidationError.value = error
-            return error == null
+            return isValidSim
         } else {
             if (cleanNational.length < 7) {
-                _phoneValidationError.value = "Please enter a valid phone number"
+                _phoneValidationError.value = "कृपया एक मान्य फ़ोन नंबर दर्ज करें"
                 return false
             }
             _phoneValidationError.value = null

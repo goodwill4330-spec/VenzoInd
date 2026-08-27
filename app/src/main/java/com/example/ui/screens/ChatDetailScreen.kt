@@ -191,14 +191,21 @@ fun ChatDetailScreen(
         }
     }
 
-    if (activeChat == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = BharatSaffron)
-        }
-        return
-    }
-
-    val chat = activeChat!!
+    val chat = activeChat ?: ChatEntity(
+        id = "chat_active",
+        title = "Sovereign Chat",
+        subtitle = "End-to-End Encrypted",
+        lastMessage = "",
+        lastMessageTime = "",
+        timestamp = 0L,
+        unreadCount = 0,
+        avatarInitial = "VI",
+        avatarColorHex = "#FF671F",
+        isGroup = false,
+        isSecret = false,
+        isVerifiedBusiness = false,
+        isPinned = false
+    )
 
     Scaffold(
         topBar = {

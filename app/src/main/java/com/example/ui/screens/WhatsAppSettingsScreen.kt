@@ -97,6 +97,7 @@ fun WhatsAppSettingsScreen(
     var twoStepPinInput by remember { mutableStateOf("") }
     var showStorageDetailsSheet by remember { mutableStateOf(false) }
     var showChatTransferDialog by remember { mutableStateOf(false) }
+    var showDiagnosticsDialog by remember { mutableStateOf(false) }
 
     BackHandler(enabled = currentSubScreen != SettingsSubScreen.MAIN) {
         currentSubScreen = SettingsSubScreen.MAIN
@@ -291,7 +292,11 @@ fun WhatsAppSettingsScreen(
 
                     SettingsSubScreen.HELP -> {
                         HelpSettingsContent(
-                            bColors = bColors
+                            bColors = bColors,
+                            onDiagnosticsClick = {
+                                viewModel.runFirebaseDiagnostics()
+                                showDiagnosticsDialog = true
+                            }
                         )
                     }
                 }
@@ -304,6 +309,18 @@ fun WhatsAppSettingsScreen(
             PersonalQrDialog(
                 userProfile = userProfile,
                 onDismiss = { showQrDialog = false }
+            )
+        }
+
+        if (showDiagnosticsDialog) {
+            val diagReport by viewModel.diagnosticReport.collectAsState()
+            val isRunningDiag by viewModel.isRunningDiagnostics.collectAsState()
+            FirebaseDiagnosticDialog(
+                report = diagReport,
+                isRunning = isRunningDiag,
+                onDismiss = { showDiagnosticsDialog = false },
+                onRunAgain = { viewModel.runFirebaseDiagnostics() },
+                bColors = bColors
             )
         }
 
@@ -1647,11 +1664,20 @@ private fun LanguageSelectionSheetContent(
 
 @Composable
 private fun HelpSettingsContent(
-    bColors: BharatExtendedColors
+    bColors: BharatExtendedColors,
+    onDiagnosticsClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
+            WhatsAppSettingRow(
+                icon = Icons.Outlined.NetworkCheck,
+                title = "Firebase & Network Diagnostics",
+                subtitle = "Print Auth & Firestore connection status to console",
+                onClick = onDiagnosticsClick,
+                bColors = bColors,
+                tint = BharatElectricCyan
+            )
             WhatsAppSettingRow(
                 icon = Icons.Outlined.HelpCenter,
                 title = "Help center",
@@ -1847,3 +1873,159 @@ private fun PersonalQrDialog(
         containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurface
     )
 }
+
+// ---------------------------------------------------------------------
+// FIREBASE & FIRESTORE DIAGNOSTICS DIALOG
+// ---------------------------------------------------------------------
+@Composable
+private fun FirebaseDiagnosticDialog(
+    report: com.example.utils.DiagnosticReport?,
+    isRunning: Boolean,
+    onDismiss: () -> Unit,
+    onRunAgain: () -> Unit,
+    bColors: BharatExtendedColors
+) {
+    val context = LocalContext.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CloudSync,
+                    contentDescription = "Diagnostics",
+                    tint = BharatElectricCyan,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = "Firebase & Cloud Diagnostics",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = bColors.textPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+            ) {
+                Text(
+                    text = "Diagnostic status has been printed to the console (Logcat tag: 'FirebaseDiagnostics').",
+                    fontSize = 12.sp,
+                    color = bColors.textSecondary
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (isRunning) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = BharatElectricCyan, modifier = Modifier.size(36.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Running real-time ping & pipeline checks...",
+                                fontSize = 12.sp,
+                                color = bColors.textSecondary
+                            )
+                        }
+                    }
+                } else if (report != null) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                    ) {
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (bColors.isDark) Color(0xFF0F172A) else Color(0xFFF1F5F9),
+                                border = BorderStroke(1.dp, if (report.firestorePingSuccess) BharatGreenLight.copy(alpha = 0.5f) else RoseError.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    DiagnosticStatusRow("Firebase Core App", if (report.firebaseAppInitialized) "ONLINE (${report.projectId})" else "OFFLINE", report.firebaseAppInitialized)
+                                    DiagnosticStatusRow("Firebase Auth", report.authStatus + (if (report.authUid != null) " (UID: ${report.authUid.take(6)}...)" else ""), report.authUid != null)
+                                    DiagnosticStatusRow("Firestore Instance", if (report.firestoreInitialized) "INITIALIZED" else "ERROR", report.firestoreInitialized)
+                                    DiagnosticStatusRow("Firestore Realtime Ping", if (report.firestorePingSuccess) "SUCCESS (${report.firestoreLatencyMs}ms)" else "FAIL/TIMEOUT", report.firestorePingSuccess)
+                                    DiagnosticStatusRow("Global Messages Channel", report.globalMessagesAccess, !report.globalMessagesAccess.contains("FAIL") && !report.globalMessagesAccess.contains("DENIED"))
+                                    DiagnosticStatusRow("Active Calls Signaling", report.activeCallsAccess, !report.activeCallsAccess.contains("FAIL") && !report.activeCallsAccess.contains("DENIED"))
+                                    DiagnosticStatusRow("Peer Discovery (Users)", report.usersAccess, !report.usersAccess.contains("FAIL") && !report.usersAccess.contains("DENIED"))
+                                }
+                            }
+
+                            if (report.errorSummary.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Identified Issues:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = RoseError)
+                                report.errorSummary.forEach { err ->
+                                    Text("• $err", fontSize = 11.sp, color = RoseError)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text("No diagnostic run yet.", fontSize = 12.sp, color = bColors.textSecondary)
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        if (report != null) {
+                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(report.rawLogText))
+                            Toast.makeText(context, "Diagnostic logs copied to clipboard", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("COPY LOGS", fontSize = 11.sp)
+                }
+
+                Button(
+                    onClick = onRunAgain,
+                    colors = ButtonDefaults.buttonColors(containerColor = BharatElectricCyan)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("RE-TEST", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CLOSE", color = bColors.textSecondary)
+            }
+        },
+        containerColor = if (bColors.isDark) DarkSurfaceElevated else LightSurface
+    )
+}
+
+@Composable
+private fun DiagnosticStatusRow(label: String, value: String, isOk: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, fontSize = 11.5.sp, color = Color.Gray)
+        Text(
+            text = value,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isOk) BharatGreenLight else RoseError
+        )
+    }
+}
+

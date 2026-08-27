@@ -264,6 +264,68 @@ fun VerifiedBadge(
 }
 
 @Composable
+fun VenzoIndLinkedBadge(
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = BharatGreenLight.copy(alpha = 0.16f),
+        border = BorderStroke(0.7.dp, BharatGreenLight.copy(alpha = 0.6f)),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = null,
+                tint = BharatGreenLight,
+                modifier = Modifier.size(11.dp)
+            )
+            Text(
+                text = "VenzoInd Linked",
+                color = BharatGreenLight,
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun VenzoIndInviteBadge(
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = Color(0x22F59E0B),
+        border = BorderStroke(0.7.dp, Color(0x66F59E0B)),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Share,
+                contentDescription = null,
+                tint = Color(0xFFF59E0B),
+                modifier = Modifier.size(10.dp)
+            )
+            Text(
+                text = "Not on VenzoInd • Invite",
+                color = Color(0xFFF59E0B),
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
 fun QuantumShieldBadge(
     modifier: Modifier = Modifier,
     text: String = "Quantum Encrypted"

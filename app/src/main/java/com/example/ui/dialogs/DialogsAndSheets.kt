@@ -38,6 +38,8 @@ import com.example.ui.components.GlassCard
 import com.example.ui.components.QuantumShieldBadge
 import com.example.ui.components.StatusRingAvatar
 import com.example.ui.components.TricolorGlowPill
+import com.example.ui.components.VenzoIndLinkedBadge
+import com.example.ui.components.VenzoIndInviteBadge
 import com.example.ui.components.ZoomableProfilePicDialog
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.BharatChatViewModel
@@ -352,12 +354,20 @@ fun NewChatBottomSheet(
                                         }
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Column {
-                                            Text(
-                                                text = contact.name,
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = bColors.textPrimary
-                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = contact.name,
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = bColors.textPrimary
+                                                )
+                                                if (contact.isBharatChatUser) {
+                                                    VenzoIndLinkedBadge()
+                                                }
+                                            }
                                             Text(
                                                 text = contact.phone,
                                                 fontSize = 9.5.sp,

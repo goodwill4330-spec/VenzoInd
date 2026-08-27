@@ -16,9 +16,12 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -34,10 +37,19 @@ class FirestoreManager private constructor(private val context: Context) {
     private var activeCallDocListener: ListenerRegistration? = null
     private var usersListener: ListenerRegistration? = null
     private var storiesListener: ListenerRegistration? = null
+    private var presenceHeartbeatJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
     private val _isFirestoreConnected = MutableStateFlow(false)
     val isFirestoreConnected: StateFlow<Boolean> = _isFirestoreConnected.asStateFlow()
+
+    // Real-time map of user deviceId / phone -> isOnline status
+    private val _onlineUsersMap = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val onlineUsersMap: StateFlow<Map<String, Boolean>> = _onlineUsersMap.asStateFlow()
+
+    // Real-time map of user deviceId / phone -> lastSeen timestamp
+    private val _usersLastSeenMap = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val usersLastSeenMap: StateFlow<Map<String, Long>> = _usersLastSeenMap.asStateFlow()
 
     init {
         initializeFirestore()
@@ -687,14 +699,15 @@ class FirestoreManager private constructor(private val context: Context) {
     }
 
     // ==========================================
-    // Cloud User Discovery & Profile Sync
+    // Cloud User Discovery & Real-Time Presence Sync
     // ==========================================
 
-    fun publishUserProfile(profile: UserProfile, deviceId: String = "") {
+    fun setUserOnlinePresence(profile: UserProfile, isOnline: Boolean, deviceId: String = "") {
         val db = firestoreInstance ?: return
         scope.launch {
             try {
                 val userId = if (deviceId.isNotBlank()) deviceId else (if (profile.phone.isNotBlank()) profile.phone.replace(" ", "").replace("+", "") else profile.bharatId)
+                val now = System.currentTimeMillis()
                 val userData = hashMapOf(
                     "deviceId" to deviceId,
                     "name" to profile.name,
@@ -704,15 +717,46 @@ class FirestoreManager private constructor(private val context: Context) {
                     "avatarColorHex" to profile.avatarColorHex,
                     "statusBio" to profile.statusBio,
                     "upiVpa" to profile.upiVpa,
-                    "lastSeen" to System.currentTimeMillis()
+                    "isOnline" to isOnline,
+                    "state" to if (isOnline) "online" else "offline",
+                    "lastSeen" to now,
+                    "updatedAt" to now
                 )
                 db.collection("users")
                     .document(userId)
                     .set(userData, SetOptions.merge())
+                Log.d(TAG, "Presence updated for user $userId: isOnline=$isOnline")
             } catch (e: Exception) {
-                Log.e(TAG, "publishUserProfile error: ${e.message}")
+                Log.e(TAG, "setUserOnlinePresence error: ${e.message}")
             }
         }
+    }
+
+    fun startPresenceHeartbeat(profileProvider: () -> UserProfile, deviceId: String = "") {
+        presenceHeartbeatJob?.cancel()
+        presenceHeartbeatJob = scope.launch {
+            while (isActive) {
+                try {
+                    val profile = profileProvider()
+                    setUserOnlinePresence(profile, isOnline = true, deviceId = deviceId)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Heartbeat tick error: ${e.message}")
+                }
+                delay(25_000L) // Ping every 25 seconds to keep online status fresh
+            }
+        }
+    }
+
+    fun stopPresenceHeartbeat(profile: UserProfile? = null, deviceId: String = "") {
+        presenceHeartbeatJob?.cancel()
+        presenceHeartbeatJob = null
+        if (profile != null) {
+            setUserOnlinePresence(profile, isOnline = false, deviceId = deviceId)
+        }
+    }
+
+    fun publishUserProfile(profile: UserProfile, deviceId: String = "", isOnline: Boolean = true) {
+        setUserOnlinePresence(profile, isOnline = isOnline, deviceId = deviceId)
     }
 
     fun listenForCloudUsers(appDatabase: AppDatabase, currentUserName: String, myDeviceId: String = "") {
@@ -725,7 +769,11 @@ class FirestoreManager private constructor(private val context: Context) {
                 .addSnapshotListener { snapshots, error ->
                     if (error != null || snapshots == null) return@addSnapshotListener
                     scope.launch {
-                        val contacts = mutableListOf<ContactEntity>()
+                        val contactsToInsert = mutableListOf<ContactEntity>()
+                        val newOnlineMap = mutableMapOf<String, Boolean>()
+                        val newLastSeenMap = mutableMapOf<String, Long>()
+                        val now = System.currentTimeMillis()
+
                         for (doc in snapshots.documents) {
                             try {
                                 val docDeviceId = doc.getString("deviceId") ?: doc.id
@@ -734,6 +782,25 @@ class FirestoreManager private constructor(private val context: Context) {
 
                                 val cloudName = doc.getString("name") ?: "Venzo User"
                                 val phone = doc.getString("phone") ?: ""
+                                val isOnlineInCloud = doc.getBoolean("isOnline") ?: false
+                                val lastSeenInCloud = doc.getLong("lastSeen") ?: now
+
+                                // User is considered active/online if flagged isOnline within last 2 minutes or pinged within last 45 seconds
+                                val isActuallyOnline = (isOnlineInCloud && (now - lastSeenInCloud < 120_000L)) || (now - lastSeenInCloud < 45_000L)
+
+                                if (docDeviceId.isNotBlank()) {
+                                    newOnlineMap[docDeviceId] = isActuallyOnline
+                                    newLastSeenMap[docDeviceId] = lastSeenInCloud
+                                }
+                                if (phone.isNotBlank()) {
+                                    val normPhone = contactProvider.normalizePhoneNumber(phone)
+                                    newOnlineMap[phone] = isActuallyOnline
+                                    newLastSeenMap[phone] = lastSeenInCloud
+                                    if (normPhone.isNotBlank()) {
+                                        newOnlineMap[normPhone] = isActuallyOnline
+                                        newLastSeenMap[normPhone] = lastSeenInCloud
+                                    }
+                                }
 
                                 // Try to lookup contact name in local device phonebook if available
                                 val deviceContactName = if (phone.isNotBlank()) {
@@ -749,20 +816,34 @@ class FirestoreManager private constructor(private val context: Context) {
                                 val contactId = "contact_$targetId"
                                 val chatId = "chat_$targetId"
 
-                                val contact = ContactEntity(
-                                    id = contactId,
-                                    name = effectiveName,
-                                    phone = if (phone.isNotBlank()) phone else "+91 98000 00000",
-                                    upiVpa = upiVpa,
-                                    avatarInitial = avatarInitial,
-                                    avatarColorHex = avatarColorHex,
-                                    statusMsg = statusBio,
-                                    isBharatChatUser = true,
-                                    lastSeenTimestamp = doc.getLong("lastSeen") ?: System.currentTimeMillis()
-                                )
-                                contacts.add(contact)
+                                // Check if contact already exists in local DB
+                                val existingContact = appDatabase.contactDao().getContactById(contactId) 
+                                    ?: (if (phone.isNotBlank()) appDatabase.contactDao().getContactByPhone(phone) else null)
 
-                                // Ensure chat entity exists for this user so chatting is instant
+                                if (existingContact != null) {
+                                    // Update existing contact's presence & metadata in Room DB
+                                    appDatabase.contactDao().updateContactPresence(
+                                        contactId = existingContact.id,
+                                        isOnline = isActuallyOnline,
+                                        lastSeen = lastSeenInCloud
+                                    )
+                                } else {
+                                    val contact = ContactEntity(
+                                        id = contactId,
+                                        name = effectiveName,
+                                        phone = if (phone.isNotBlank()) phone else "+91 98000 00000",
+                                        upiVpa = upiVpa,
+                                        avatarInitial = avatarInitial,
+                                        avatarColorHex = avatarColorHex,
+                                        statusMsg = statusBio,
+                                        isBharatChatUser = true,
+                                        lastSeenTimestamp = lastSeenInCloud,
+                                        isOnline = isActuallyOnline
+                                    )
+                                    contactsToInsert.add(contact)
+                                }
+
+                                // Ensure chat entity presence is in sync
                                 val existingChat = appDatabase.chatDao().getChatById(chatId)
                                 if (existingChat == null) {
                                     val newChat = ChatEntity(
@@ -771,24 +852,29 @@ class FirestoreManager private constructor(private val context: Context) {
                                         subtitle = statusBio,
                                         avatarInitial = avatarInitial,
                                         avatarColorHex = avatarColorHex,
-                                        isOnline = true,
-                                        lastMessage = "Connected on VenzoInd 🟢",
-                                        lastMessageTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()),
-                                        timestamp = System.currentTimeMillis()
+                                        isOnline = isActuallyOnline,
+                                        lastMessage = if (isActuallyOnline) "Online on VenzoInd 🟢" else "Connected on VenzoInd",
+                                        lastMessageTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(lastSeenInCloud)),
+                                        timestamp = lastSeenInCloud
                                     )
                                     appDatabase.chatDao().insertChat(newChat)
                                 } else {
-                                    if (existingChat.title != effectiveName) {
+                                    appDatabase.chatDao().updateChatOnlineStatus(chatId, isActuallyOnline)
+                                    if (existingChat.title != effectiveName && deviceContactName != null) {
                                         appDatabase.chatDao().updateChatTitle(chatId, effectiveName)
                                     }
                                 }
                             } catch (e: Exception) {
-                                Log.e(TAG, "Error parsing user: ${e.message}")
+                                Log.e(TAG, "Error parsing user doc: ${e.message}")
                             }
                         }
-                        if (contacts.isNotEmpty()) {
-                            appDatabase.contactDao().insertContacts(contacts)
+
+                        if (contactsToInsert.isNotEmpty()) {
+                            appDatabase.contactDao().insertContacts(contactsToInsert)
                         }
+
+                        _onlineUsersMap.value = newOnlineMap
+                        _usersLastSeenMap.value = newLastSeenMap
                     }
                 }
         } catch (e: Exception) {

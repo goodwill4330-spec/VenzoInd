@@ -175,7 +175,8 @@ data class ContactEntity(
     val isBlocked: Boolean = false,
     val publicKeyFingerprint: String = "KYBER-1024-DEF78A",
     val lastSeenTimestamp: Long = System.currentTimeMillis(),
-    val profilePicUri: String? = null
+    val profilePicUri: String? = null,
+    val isOnline: Boolean = false
 ) {
     val statusBio: String get() = statusMsg
     val status: String get() = statusMsg

@@ -48,6 +48,8 @@ import com.example.ui.components.QuantumShieldBadge
 import com.example.ui.components.StatusRingAvatar
 import com.example.ui.components.TricolorGlowPill
 import com.example.ui.components.VerifiedBadge
+import com.example.ui.components.VenzoIndLinkedBadge
+import com.example.ui.components.VenzoIndInviteBadge
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.AppScreen
 import com.example.ui.viewmodel.BharatChatViewModel
@@ -77,6 +79,8 @@ fun ContactsListScreen(
     val contacts by viewModel.filteredAndSortedContacts.collectAsState()
     val allContacts by viewModel.contacts.collectAsState()
     val showBackupRestore by viewModel.showBackupRestoreDialog.collectAsState()
+    val onlineUsersMap by viewModel.onlineUsersMap.collectAsState()
+    val usersLastSeenMap by viewModel.usersLastSeenMap.collectAsState()
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -106,28 +110,49 @@ fun ContactsListScreen(
         }
     }
 
-    // Filter contacts based on active quick filter chip
-    val displayedContacts = remember(contacts, activeFilter) {
-        when (activeFilter) {
-            ContactQuickFilter.ALL -> contacts
-            ContactQuickFilter.ONLINE -> contacts.filter {
-                it.lastSeenTimestamp > System.currentTimeMillis() - 180_000L
-            }
-            ContactQuickFilter.FAVORITES -> contacts.filter { it.isFavorite }
-            ContactQuickFilter.RECENT -> contacts.sortedByDescending { it.lastSeenTimestamp }
-            ContactQuickFilter.VERIFIED -> contacts.filter { it.isBharatChatUser }
-        }
-    }
-
-    // Computed presence mapping
+    // Computed real-time presence mapping
     fun getPresence(contact: ContactEntity): ContactPresence {
-        val diffMs = System.currentTimeMillis() - contact.lastSeenTimestamp
+        val targetDevId = contact.id.removePrefix("contact_")
+        val cleanPhone = contact.phone.filter { it.isDigit() }.takeLast(10)
+
+        val inMemoryOnline: Boolean = onlineUsersMap[targetDevId]
+            ?: onlineUsersMap[contact.phone]
+            ?: (if (cleanPhone.isNotBlank()) onlineUsersMap[cleanPhone] else null)
+            ?: contact.isOnline
+
+        val lastSeen: Long = usersLastSeenMap[targetDevId]
+            ?: usersLastSeenMap[contact.phone]
+            ?: (if (cleanPhone.isNotBlank()) usersLastSeenMap[cleanPhone] else null)
+            ?: contact.lastSeenTimestamp
+
+        val diffMs = System.currentTimeMillis() - lastSeen
         return when {
-            diffMs <= 180_000L -> ContactPresence.ONLINE
+            inMemoryOnline || diffMs <= 90_000L -> ContactPresence.ONLINE
             diffMs <= 1800_000L -> ContactPresence.AWAY
             contact.statusMsg.contains("Busy", ignoreCase = true) ||
             contact.statusMsg.contains("Meeting", ignoreCase = true) -> ContactPresence.BUSY
             else -> ContactPresence.OFFLINE
+        }
+    }
+
+    // Filter contacts based on active quick filter chip
+    val displayedContacts = remember(contacts, activeFilter, onlineUsersMap, usersLastSeenMap) {
+        when (activeFilter) {
+            ContactQuickFilter.ALL -> contacts
+            ContactQuickFilter.ONLINE -> contacts.filter { contact ->
+                getPresence(contact) == ContactPresence.ONLINE
+            }
+            ContactQuickFilter.FAVORITES -> contacts.filter { it.isFavorite }
+            ContactQuickFilter.RECENT -> contacts.sortedByDescending { contact ->
+                val targetDevId = contact.id.removePrefix("contact_")
+                val cleanPhone = contact.phone.filter { it.isDigit() }.takeLast(10)
+                val lastSeen: Long = usersLastSeenMap[targetDevId]
+                    ?: usersLastSeenMap[contact.phone]
+                    ?: (if (cleanPhone.isNotBlank()) usersLastSeenMap[cleanPhone] else null)
+                    ?: contact.lastSeenTimestamp
+                lastSeen
+            }
+            ContactQuickFilter.VERIFIED -> contacts.filter { it.isBharatChatUser }
         }
     }
 
@@ -153,9 +178,9 @@ fun ContactsListScreen(
         derivedStateOf { listState.firstVisibleItemIndex > 3 }
     }
 
-    // Online count
-    val onlineCount = remember(allContacts) {
-        allContacts.count { it.lastSeenTimestamp > System.currentTimeMillis() - 180_000L }
+    // Real-time online count
+    val onlineCount = remember(allContacts, onlineUsersMap, usersLastSeenMap) {
+        allContacts.count { getPresence(it) == ContactPresence.ONLINE }
     }
 
     Scaffold(
@@ -868,8 +893,9 @@ fun ContactItemCard(
     modifier: Modifier = Modifier
 ) {
     val bColors = LocalBharatColors.current
-    val recentActivityText = remember(contact.lastSeenTimestamp) {
-        formatRecentActivity(contact.lastSeenTimestamp)
+    val isOnlineNow = presence == ContactPresence.ONLINE
+    val recentActivityText = remember(contact.lastSeenTimestamp, isOnlineNow) {
+        formatRecentActivity(contact.lastSeenTimestamp, isOnline = isOnlineNow)
     }
 
     GlassCard(
@@ -905,7 +931,7 @@ fun ContactItemCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
                             text = contact.name,
@@ -916,7 +942,9 @@ fun ContactItemCard(
                             overflow = TextOverflow.Ellipsis
                         )
                         if (contact.isBharatChatUser) {
-                            VerifiedBadge()
+                            VenzoIndLinkedBadge()
+                        } else {
+                            VenzoIndInviteBadge()
                         }
                     }
 
@@ -1131,12 +1159,22 @@ fun ContactActionSheet(
                     )
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = contact.name,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = bColors.textPrimary
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = contact.name,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = bColors.textPrimary
+                            )
+                            if (contact.isBharatChatUser) {
+                                VenzoIndLinkedBadge()
+                            } else {
+                                VenzoIndInviteBadge()
+                            }
+                        }
                         Text(
                             text = contact.phone,
                             fontSize = 12.sp,
@@ -1433,18 +1471,20 @@ fun AddContactDialog(
     }
 }
 
-fun formatRecentActivity(timestamp: Long): String {
+fun formatRecentActivity(timestamp: Long, isOnline: Boolean = false): String {
+    if (isOnline) return "Online now 🟢"
+    if (timestamp <= 0L) return "Offline"
     val diffMs = System.currentTimeMillis() - timestamp
     val diffMins = diffMs / (1000 * 60)
     val diffHours = diffMs / (1000 * 60 * 60)
     val diffDays = diffMs / (1000 * 60 * 60 * 24)
 
     return when {
-        diffMins <= 3 -> "Active now 🟢"
-        diffMins < 60 -> "${diffMins}m ago"
-        diffHours < 24 -> "${diffHours}h ago"
-        diffDays == 1L -> "Yesterday"
-        diffDays < 7 -> "${diffDays}d ago"
-        else -> SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(timestamp))
+        diffMins <= 1 -> "Online just now"
+        diffMins < 60 -> "Last seen ${diffMins}m ago"
+        diffHours < 24 -> "Last seen ${diffHours}h ago"
+        diffDays == 1L -> "Last seen yesterday"
+        diffDays < 7 -> "Last seen ${diffDays}d ago"
+        else -> "Last seen " + SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(timestamp))
     }
 }

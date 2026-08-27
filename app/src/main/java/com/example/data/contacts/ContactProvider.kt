@@ -229,6 +229,8 @@ class ContactProvider private constructor(
                 val cloudAvatar = matchedUser["avatarInitial"] as? String ?: initials
                 val cloudUpi = matchedUser["upiVpa"] as? String ?: "${devContact.displayName.lowercase().replace(" ", "")}@upi"
                 val lastSeen = (matchedUser["lastSeen"] as? Long) ?: System.currentTimeMillis()
+                val isOnlineVal = (matchedUser["isOnline"] as? Boolean) ?: false
+                val isActuallyOnline = (isOnlineVal && (System.currentTimeMillis() - lastSeen < 120_000L)) || (System.currentTimeMillis() - lastSeen < 45_000L)
 
                 val entity = ContactEntity(
                     id = contactId,
@@ -242,7 +244,8 @@ class ContactProvider private constructor(
                     isFavorite = false,
                     publicKeyFingerprint = "KYBER-1024-${UUID.randomUUID().toString().take(6).uppercase()}",
                     lastSeenTimestamp = lastSeen,
-                    profilePicUri = devContact.photoUri
+                    profilePicUri = devContact.photoUri,
+                    isOnline = isActuallyOnline
                 )
                 finalContacts.add(entity)
 
@@ -255,14 +258,15 @@ class ContactProvider private constructor(
                         subtitle = cloudBio,
                         avatarInitial = cloudAvatar,
                         avatarColorHex = cloudColor,
-                        isOnline = true,
-                        lastMessage = "Connected on VenzoInd 🟢",
-                        lastMessageTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()),
-                        timestamp = System.currentTimeMillis()
+                        isOnline = isActuallyOnline,
+                        lastMessage = if (isActuallyOnline) "Online on VenzoInd 🟢" else "Connected on VenzoInd",
+                        lastMessageTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(lastSeen)),
+                        timestamp = lastSeen
                     )
                     appDatabase.chatDao().insertChat(newChat)
                 } else {
                     appDatabase.chatDao().updateChatTitle(chatId, devContact.displayName)
+                    appDatabase.chatDao().updateChatOnlineStatus(chatId, isActuallyOnline)
                 }
             } else {
                 // NON-REGISTERED DEVICE CONTACT

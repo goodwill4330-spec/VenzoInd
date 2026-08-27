@@ -42,6 +42,9 @@ interface ChatDao {
     @Query("UPDATE chats SET isPinned = CASE WHEN isPinned = 1 THEN 0 ELSE 1 END WHERE id = :chatId")
     suspend fun toggleChatPin(chatId: String)
 
+    @Query("UPDATE chats SET isOnline = :isOnline WHERE id = :chatId")
+    suspend fun updateChatOnlineStatus(chatId: String, isOnline: Boolean)
+
     @Query("SELECT COUNT(*) FROM chats")
     suspend fun getChatsCount(): Int
 
@@ -215,6 +218,12 @@ interface ContactDao {
 
     @Query("UPDATE contacts SET isBlocked = :isBlocked WHERE id = :contactId")
     suspend fun updateBlockedStatus(contactId: String, isBlocked: Boolean)
+
+    @Query("UPDATE contacts SET isOnline = :isOnline, lastSeenTimestamp = :lastSeen WHERE id = :contactId")
+    suspend fun updateContactPresence(contactId: String, isOnline: Boolean, lastSeen: Long)
+
+    @Query("UPDATE contacts SET isOnline = :isOnline, lastSeenTimestamp = :lastSeen WHERE phone = :phone")
+    suspend fun updateContactPresenceByPhone(phone: String, isOnline: Boolean, lastSeen: Long)
 
     @Query("DELETE FROM contacts WHERE id = :contactId")
     suspend fun deleteContactById(contactId: String)

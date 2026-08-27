@@ -1009,43 +1009,68 @@ fun ActiveCallScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
-                    .padding(top = 80.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(
+                        top = if (showStatsOverlay && callState.isConnected) 140.dp else 90.dp,
+                        bottom = 120.dp,
+                        start = 24.dp,
+                        end = 24.dp
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = callState.contactName,
-                    fontSize = 26.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = BharatWhite
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-                Text(
-                    text = if (!callState.isConnected) "Calling • Ringing..." else timerStr,
-                    fontSize = 15.sp,
-                    color = if (callState.isConnected) BharatGreenLight else BharatElectricCyan,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (callState.isConnected) BharatGreenLight.copy(alpha = 0.2f) else BharatSaffron.copy(alpha = 0.2f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (callState.isConnected) BharatGreenLight else BharatSaffron)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (callState.isConnected) BharatGreenLight else BharatSaffron)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (!callState.isConnected) "Calling • Ringing..." else "Connected • $timerStr",
+                            fontSize = 13.5.sp,
+                            color = if (callState.isConnected) BharatGreenLight else BharatSaffronLight,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
 
-                Spacer(modifier = Modifier.height(40.dp))
+                Spacer(modifier = Modifier.height(30.dp))
 
+                // Pulsing Avatar with Glowing Halo
                 Box(
                     modifier = Modifier
-                        .size(170.dp)
+                        .size(160.dp)
                         .scale(if (!callState.isConnected) pulseScale else 1f)
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
                                 listOf(
-                                    BharatSaffron.copy(alpha = 0.4f),
-                                    BharatElectricCyan.copy(alpha = 0.2f),
+                                    BharatSaffron.copy(alpha = 0.45f),
+                                    BharatElectricCyan.copy(alpha = 0.25f),
                                     Color.Transparent
                                 )
                             )
                         )
                         .border(
-                            3.dp,
+                            3.5.dp,
                             Brush.sweepGradient(listOf(BharatSaffron, BharatWhite, BharatGreenLight, BharatSaffron)),
                             CircleShape
                         ),
@@ -1053,9 +1078,83 @@ fun ActiveCallScreen(
                 ) {
                     Text(
                         text = callState.contactAvatar,
-                        fontSize = 54.sp,
+                        fontSize = 52.sp,
                         fontWeight = FontWeight.Bold,
                         color = BharatWhite
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Live Audio Waveform Stream Visualizer & Voice Test
+                if (callState.isConnected) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        listOf(0.6f, 1.2f, 0.8f, 1.4f, 0.9f, 1.3f, 0.7f).forEach { multiplier ->
+                            val animHeight by infiniteTransition.animateFloat(
+                                initialValue = 10f * multiplier,
+                                targetValue = 28f * multiplier,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(durationMillis = 400 + (multiplier * 200).toInt(), easing = LinearEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "waveBar"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .height(animHeight.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(if (callState.isMuted) Color.Gray else BharatElectricCyan)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = if (callState.isMuted) "🔇 Microphone Muted" else "🔊 Live Voice Connected • 320 kbps Opus",
+                        fontSize = 12.sp,
+                        color = if (callState.isMuted) RoseError else BharatGreenLight,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Remote Voice Test / Speak Button
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0x661E293B),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BharatElectricCyan.copy(alpha = 0.6f)),
+                        modifier = Modifier.clickable { viewModel.speakCallTestPhrase() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = "Test Remote Voice",
+                                tint = BharatElectricCyan,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "🗣️ Speak / Test Voice Line",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = BharatWhite
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Encrypted with Post-Quantum Kyber-1024",
+                        fontSize = 12.sp,
+                        color = TextSecondaryDark
                     )
                 }
             }

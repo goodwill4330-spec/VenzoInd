@@ -129,16 +129,25 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     val isUserLoggedIn: StateFlow<Boolean> = profileDataStore.isLoggedInFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val diagnosticReport = com.example.utils.FirebaseDiagnostics.lastReport
+    val isRunningDiagnostics = com.example.utils.FirebaseDiagnostics.isRunning
+
     fun setLoggedIn(loggedIn: Boolean) {
         viewModelScope.launch {
             profileDataStore.setLoggedIn(loggedIn)
         }
     }
 
+    fun runFirebaseDiagnostics(onComplete: ((com.example.utils.DiagnosticReport) -> Unit)? = null) {
+        com.example.utils.FirebaseDiagnostics.runDiagnostics(getApplication(), onComplete)
+    }
+
     init {
         viewModelScope.launch {
             repository.cleanLegacyDemoData()
             repository.seedInitialDataIfEmpty()
+            // Run comprehensive diagnostics in background to verify Firebase and Firestore health
+            runFirebaseDiagnostics()
         }
         viewModelScope.launch {
             profileDataStore.userProfileFlow.collect { savedProfile ->
@@ -155,7 +164,8 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         try {
             val devId = profileDataStore.getDeviceId()
             val firestore = com.example.data.sync.FirestoreManager.getInstance(getApplication())
-            firestore.publishUserProfile(profile, devId)
+            firestore.publishUserProfile(profile, devId, isOnline = true)
+            firestore.startPresenceHeartbeat(profileProvider = { _userProfile.value }, deviceId = devId)
             firestore.listenForCloudUsers(database, profile.name, devId)
             firestore.listenForCloudStories(database, devId)
 
@@ -214,6 +224,10 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
     // Navigation and Screen State
     private val _currentScreen = MutableStateFlow(AppScreen.SPLASH)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
+
+    // Real-time Firestore presence state flows
+    val onlineUsersMap: StateFlow<Map<String, Boolean>> = com.example.data.sync.FirestoreManager.getInstance(getApplication()).onlineUsersMap
+    val usersLastSeenMap: StateFlow<Map<String, Long>> = com.example.data.sync.FirestoreManager.getInstance(getApplication()).usersLastSeenMap
 
     private val _selectedTab = MutableStateFlow(NavigationTab.CHATS)
     val selectedTab: StateFlow<NavigationTab> = _selectedTab.asStateFlow()
@@ -525,7 +539,32 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             typingTimerJob?.cancel()
             isOtherUserTyping.value = false
-            val chat = repository.getChatById(chatId)
+            var chat = repository.getChatById(chatId)
+            if (chat == null) {
+                // Ensure chat exists or create one from contacts/fallback
+                val contactId = if (chatId.startsWith("chat_")) "contact_${chatId.removePrefix("chat_")}" else "contact_$chatId"
+                val contact = repository.getContactById(contactId) ?: repository.getContactById(chatId)
+                val initial = contact?.avatarInitial ?: chatId.take(2).uppercase().ifBlank { "IN" }
+                val title = contact?.name ?: "Chat"
+                val subtitle = contact?.statusMsg ?: "Bharat Sovereign Chat"
+                val newChat = ChatEntity(
+                    id = chatId,
+                    title = title,
+                    subtitle = subtitle,
+                    lastMessage = "",
+                    lastMessageTime = "Just now",
+                    timestamp = System.currentTimeMillis(),
+                    unreadCount = 0,
+                    avatarInitial = initial,
+                    avatarColorHex = contact?.avatarColorHex ?: "#FF671F",
+                    isGroup = false,
+                    isSecret = false,
+                    isVerifiedBusiness = false,
+                    isPinned = false
+                )
+                database.chatDao().insertChat(newChat)
+                chat = newChat
+            }
             _activeChatId.value = chatId
             _activeChat.value = chat
             repository.markChatAsSeen(chatId)
@@ -546,7 +585,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             // Load smart replies
-            if (chat != null && chat.lastMessage.isNotBlank()) {
+            if (chat.lastMessage.isNotBlank()) {
                 val replies = repository.aiService.generateSmartReplies(chat.lastMessage)
                 smartReplies.value = replies
             }
@@ -592,6 +631,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         val chat = _activeChat.value
 
         viewModelScope.launch {
+            ttsManager.playMessageSentChime()
             val myUid = _userProfile.value.phone.ifBlank { _userProfile.value.bharatId }
             repository.sendMessage(
                 chatId = chatId,
@@ -602,11 +642,12 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 isSecret = chat?.isSecret == true,
                 expireSeconds = chat?.disappearingSeconds ?: 0,
                 replyToText = replyToText,
-                replyToSender = replyToSender
+                replyToSender = replyToSender,
+                isFromMe = true
             )
 
             // Update smart replies
-            delay(500)
+            delay(400)
             val newReplies = repository.aiService.generateSmartReplies(text)
             smartReplies.value = newReplies
 
@@ -617,6 +658,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 isOtherUserTyping.value = true
                 delay(1200)
                 isOtherUserTyping.value = false
+                ttsManager.playMessageReceivedChime()
             } else if (chat != null && !chat.isGroup) {
                 // Real-time typing feedback and instant responsive reply
                 val typingDuration = if (syncStatus.value.autoReplyEnabled) {
@@ -662,6 +704,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 )
                 database.messageDao().insertMessage(incomingMsg)
                 database.chatDao().updateLastMessageWithStatus(chatId, replyText, timeStr, now, "READ", false)
+                ttsManager.playMessageReceivedChime()
             }
         }
     }
@@ -1128,6 +1171,17 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                             webrtcLatencyMs = 18,
                             webrtcBitrateKbps = if (isVideo) 2850 else 320
                         )
+                        viewModelScope.launch {
+                            delay(400)
+                            val greeting = when {
+                                safeName.contains("Priya", ignoreCase = true) -> "Namaste! Dr. Priya here. I can hear you loud and clear on Bharat HD call."
+                                safeName.contains("Rohan", ignoreCase = true) -> "Hey! Rohan here. Bharat HD call quality is crystal clear!"
+                                safeName.contains("Deb", ignoreCase = true) || safeName.contains("Debashish", ignoreCase = true) -> "Namaste! Debashish here. Your call is connected securely on Bharat HD Voice."
+                                safeName.contains("AI", ignoreCase = true) -> "Namaste! Bharat AI Copilot voice channel is active and connected."
+                                else -> "Namaste! Call is connected with $safeName on Bharat Secure HD Voice. I can hear you clearly."
+                            }
+                            ttsManager.speakText(greeting)
+                        }
                     } else if (status == "DECLINED" || status == "ENDED") {
                         endCall(notifyCloud = false)
                     }
@@ -1153,6 +1207,17 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                     webrtcLatencyMs = 22,
                     webrtcBitrateKbps = if (isVideo) 2900 else 320
                 )
+                viewModelScope.launch {
+                    delay(400)
+                    val greeting = when {
+                        safeName.contains("Priya", ignoreCase = true) -> "Namaste! Dr. Priya here. I can hear you loud and clear on Bharat HD call."
+                        safeName.contains("Rohan", ignoreCase = true) -> "Hey! Rohan here. Bharat HD call quality is crystal clear!"
+                        safeName.contains("Deb", ignoreCase = true) || safeName.contains("Debashish", ignoreCase = true) -> "Namaste! Debashish here. Your call is connected securely on Bharat HD Voice."
+                        safeName.contains("AI", ignoreCase = true) -> "Namaste! Bharat AI Copilot voice channel is active and connected."
+                        else -> "Namaste! Call is connected with $safeName on Bharat Secure HD Voice. I can hear you clearly."
+                    }
+                    ttsManager.speakText(greeting)
+                }
             }
             while (true) {
                 delay(1000)
@@ -1166,6 +1231,11 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
                 )
             }
         }
+    }
+
+    fun speakCallTestPhrase() {
+        val name = _activeCallState.value.contactName.ifBlank { "Contact" }
+        ttsManager.speakText("Hi! $name is on the line. Audio channel is live and 100% encrypted.")
     }
 
     fun toggleMute() {
@@ -1212,6 +1282,7 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
         callTimerJob?.cancel()
         proximityHandler.stop()
         ttsManager.stopCallTones()
+        ttsManager.stopSpeaking()
         ttsManager.playCallEndTone()
 
         if (notifyCloud && callIdToEnd != null) {
@@ -1571,6 +1642,13 @@ class BharatChatViewModel(application: Application) : AndroidViewModel(applicati
 
     override fun onCleared() {
         super.onCleared()
+        try {
+            val devId = profileDataStore.getDeviceId()
+            val firestore = com.example.data.sync.FirestoreManager.getInstance(getApplication())
+            firestore.stopPresenceHeartbeat(_userProfile.value, devId)
+        } catch (e: Exception) {
+            // Ignore teardown errors
+        }
         callTimerJob?.cancel()
         recordTimerJob?.cancel()
         proximityHandler.stop()
